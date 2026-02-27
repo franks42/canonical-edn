@@ -13,22 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1 implementation complete — JVM, CEDN-P profile.**
+**v1 implementation complete — JVM + Babashka, CEDN-P profile.**
 
-All 8 implementation steps are done and tested:
+All modules done and tested.  Zero production dependencies beyond Clojure.
 
 | Module | Status | Description |
 |--------|--------|-------------|
 | `cedn.error` | Done | 7 error constructors (`unsupported-type!`, `invalid-number!`, `out-of-range!`, `duplicate-key!`, `duplicate-element!`, `invalid-unicode!`, `invalid-tag-form!`) |
-| `cedn.number` | Done | `format-double` using JCS `NumberToJSON` on JVM, all Appendix B test vectors passing |
-| `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering |
+| `cedn.number` | Done | Pure Clojure `ecma-reformat` post-processes `Double/toString` into ECMAScript format. Single `:clj` branch for JVM+bb. JCS is test-only cross-validation oracle. |
+| `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). |
 | `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection |
 | `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: 73 tests, 246 assertions, 0 failures.**
+**Test results: JVM 75 tests / 21,334 assertions, bb 70 tests / 1,293 assertions, 0 failures.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -110,6 +110,7 @@ cedn/
         ├── emit_test.cljc      ← per-type emission + Appendix C vectors
         ├── order_test.cljc     ← rank comparator tests
         ├── number_test.cljc    ← double formatting + Appendix B vectors
+        ├── number-reference.edn ← 1,051 JVM-generated reference vectors
         ├── error_test.cljc     ← error constructor tests
         ├── schema_test.cljc    ← schema validation tests
         └── property_test.cljc  ← generative property tests
@@ -183,13 +184,25 @@ All three checks must pass with zero errors and zero warnings before
 any commit.  Run on ALL source and test files, not just modified ones.
 
 ```bash
-# 1. Tests — all must pass
+# 1. Tests (JVM) — all must pass
 clj -X:test
 
-# 2. Linting — must report 0 errors, 0 warnings
+# 2. Tests (Babashka) — all must pass
+bb -cp src:test -e '
+(require (quote clojure.test)
+         (quote cedn.number-test) (quote cedn.order-test)
+         (quote cedn.core-test) (quote cedn.emit-test)
+         (quote cedn.error-test) (quote cedn.schema-test))
+(let [r (clojure.test/run-tests
+          (quote cedn.number-test) (quote cedn.order-test)
+          (quote cedn.core-test) (quote cedn.emit-test)
+          (quote cedn.error-test) (quote cedn.schema-test))]
+  (System/exit (if (pos? (+ (:fail r) (:error r))) 1 0)))'
+
+# 3. Linting — must report 0 errors, 0 warnings
 clj-kondo --lint src test
 
-# 3. Formatting — must report all files correct
+# 4. Formatting — must report all files correct
 cljfmt check src test
 
 # Auto-fix formatting issues:
@@ -231,10 +244,9 @@ cedn.gen
   KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
   for completeness, but no implementation work is planned.
 - **ClojureScript testing**: All code is `.cljc` ready, needs shadow-cljs setup.
-- **Babashka support**: Implemented. Pure Clojure `ecma-reformat` in `number.cljc`
-  post-processes `Double/toString` into ECMAScript format (`:bb` reader conditional).
-  `compare-strings` in `order.cljc` uses `.codePointAt` loop for bb (`.iterator`/`.nextInt`
-  unsupported). `bb.edn` provides paths config. JCS remains JVM production dependency;
-  cross-validation test confirms `ecma-reformat` matches JCS output.
-- **CLI tool**: Trivial Babashka wrapper once bb support exists.
+- **Babashka support**: Done. Pure Clojure `ecma-reformat` serves both JVM and bb.
+  `compare-strings` uses `.codePointAt` loop on bb. Full test suite passes (70 tests,
+  1,293 assertions). Cross-platform reference test verifies bb output matches JVM
+  for 1,051 doubles.
+- **CLI tool**: Trivial Babashka wrapper, now unblocked.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.

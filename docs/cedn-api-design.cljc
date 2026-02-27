@@ -31,8 +31,9 @@
 ;; cedn.schema        Hand-written predicates for CEDN-P type
 ;;                    contracts.
 ;; cedn.number        ECMAScript number formatting (internal).
-;;                    Platform-specific: delegates to JCS Java
-;;                    lib on JVM, native toString on JS.
+;;                    Pure Clojure ecma-reformat post-processes
+;;                    Double/toString into ES format on JVM/bb.
+;;                    Native toString on JS.
 ;; cedn.error         Error constructors (internal).
 ;; cedn.gen           Generators for property-based testing.
 ;;                    Built on clojure.test.check.generators.
@@ -364,8 +365,9 @@
   with EDN .0 suffix adaptation.
 
   On JS:  trivial — Number.prototype.toString() IS the spec.
-  On JVM: delegates to a JCS implementation (erdtman or cyberphone)
-          then applies .0 suffix rule.")
+  On JVM/bb: pure Clojure ecma-reformat post-processes Double/toString
+             (JDK 17+ Schubfach) into ECMAScript format, then applies
+             .0 suffix rule.  No external dependencies.")
 
 (defn format-double
   "Format a double to its canonical string representation.
@@ -377,14 +379,14 @@
 
   Cross-platform: identical output on JVM and JS."
   [x]
-  #?(:clj  ;; (let [s (JCS/serializeNumber x)]
-     ;;   (cond
-     ;;     (or (.contains s \".\") (.contains s \"e\")) s
-     ;;     :else (str s \".0\")))
-     :cljs ;; (let [s (.toString x)]
-     ;;   (if (or (str/includes? s \".\") (str/includes? s \"e\"))
+  #?(:clj  ;; (let [s (ecma-reformat (Double/toString x))]
+     ;;   (if (or (str/includes? s ".") (str/includes? s "e"))
      ;;     s
-     ;;     (str s \".0\")))
+     ;;     (str s ".0")))
+     :cljs ;; (let [s (.toString x)]
+     ;;   (if (or (str/includes? s ".") (str/includes? s "e"))
+     ;;     s
+     ;;     (str s ".0")))
      ))
 
 ) ;; end comment
