@@ -13,22 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1 implementation complete — JVM + Babashka + nbb + shadow-cljs (4 platforms), CEDN-P profile.**
+**v1 implementation complete — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.**
 
-All modules done and tested on four platforms.  Zero production dependencies beyond Clojure.
+All modules done and tested on five platforms.  Zero production dependencies beyond Clojure.
 
 | Module | Status | Description |
 |--------|--------|-------------|
 | `cedn.error` | Done | 7 error constructors (`unsupported-type!`, `invalid-number!`, `out-of-range!`, `duplicate-key!`, `duplicate-element!`, `invalid-unicode!`, `invalid-tag-form!`) |
 | `cedn.number` | Done | Pure Clojure `ecma-reformat` post-processes `Double/toString` into ECMAScript format. Single `:clj` branch for JVM+bb. JCS is test-only cross-validation oracle. |
 | `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). |
-| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars; negative zero emits as `"0"` (JS -0.0 === 0). |
+| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex via `uuid?`), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars; negative zero emits as `"0"` (JS -0.0 === 0). |
 | `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: JVM 75 / 21,335, bb 70 / 1,294, nbb 66 / 225, shadow-cljs 70 / 229 — 0 failures on all platforms.**
+**Test results: JVM 75 / 21,335, bb 70 / 1,294, nbb 66 / 225, shadow-cljs 70 / 229, Scittle 59 / 59 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -90,6 +90,7 @@ cedn/
 ├── bb.edn                     ← Babashka project config
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
+├── scittle-tests.html         ← Scittle browser test page (59 tests)
 ├── context.md                  ← this file
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -218,10 +219,15 @@ nbb -cp src:test -e '
 # 4. Tests (shadow-cljs / full CLJS) — all must pass
 npx shadow-cljs compile test
 
-# 5. Linting — must report 0 errors, 0 warnings
+# 5. Tests (Scittle / browser) — all must pass
+#    Serve from project root, open scittle-tests.html in browser
+python3 -m http.server 8787 &
+#    Check console: "ALL 59 TESTS PASSED"
+
+# 6. Linting — must report 0 errors, 0 warnings
 clj-kondo --lint src test
 
-# 6. Formatting — must report all files correct
+# 7. Formatting — must report all files correct
 cljfmt check src test
 
 # Auto-fix formatting issues:
@@ -292,14 +298,22 @@ Additional CLJS fixes for shadow-cljs:
 - `22/7` ratio guarded with `#?(:clj ...)` (not a valid CLJS constant)
 - Property tests 3 & 4 made cross-platform (vec comparison, TextDecoder)
 
-### Scittle
-Not yet tested. All `.cljc` code exercises the `:cljs` branches correctly
-under both nbb and shadow-cljs. Scittle setup should work with minimal effort.
+### Scittle (browser)
+Done. Loads source files via `<script type="application/x-scittle">` tags
+with Scittle v0.8.31 CDN. 59 tests covering all modules pass in the browser.
+
+Scittle-specific fixes (SCI symbols not available):
+- `cljs.core/UUID` → `uuid?` (cross-platform predicate, works everywhere)
+- `ExceptionInfo` → `(or (ex-data e) ...)` idiom (avoids bare symbol)
+- `uuid` macro → removed from CLJS readers (built-in EDN reader handles it)
+
+Serve and test: `python3 -m http.server 8787` then open `scittle-tests.html`.
 
 ## What's NOT Built Yet
 
 - **CEDN-R profile**: BigInt, BigDecimal, ratios.  Deprioritized indefinitely —
-  KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
-  for completeness, but no implementation work is planned.
+  KEX/Biscuit policies require only CEDN-P types.
 - **CLI tool**: Trivial Babashka wrapper, now unblocked.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.
+- **Web Crypto SHA-256**: Browser `SubtleCrypto.digest` is async; `inspect`
+  returns nil for SHA-256 on CLJS. Could wrap with async support later.
