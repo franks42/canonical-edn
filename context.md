@@ -13,22 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1 implementation complete — JVM + Babashka, CEDN-P profile.**
+**v1 implementation complete — JVM + Babashka + nbb (Node.js), CEDN-P profile.**
 
-All modules done and tested.  Zero production dependencies beyond Clojure.
+All modules done and tested on three platforms.  Zero production dependencies beyond Clojure.
 
 | Module | Status | Description |
 |--------|--------|-------------|
 | `cedn.error` | Done | 7 error constructors (`unsupported-type!`, `invalid-number!`, `out-of-range!`, `duplicate-key!`, `duplicate-element!`, `invalid-unicode!`, `invalid-tag-form!`) |
 | `cedn.number` | Done | Pure Clojure `ecma-reformat` post-processes `Double/toString` into ECMAScript format. Single `:clj` branch for JVM+bb. JCS is test-only cross-validation oracle. |
 | `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). |
-| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection |
+| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars, `neg-zero?` guard for IEEE -0.0. |
 | `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: JVM 75 tests / 21,334 assertions, bb 70 tests / 1,293 assertions, 0 failures.**
+**Test results: JVM 75 / 21,334, bb 70 / 1,293, nbb 66 / 228 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -180,7 +180,7 @@ ECMAScript implementation for 20,000+ doubles.
 
 ## Development: Test, Lint, Format
 
-All three checks must pass with zero errors and zero warnings before
+All checks must pass with zero errors and zero warnings before
 any commit.  Run on ALL source and test files, not just modified ones.
 
 ```bash
@@ -199,10 +199,21 @@ bb -cp src:test -e '
           (quote cedn.error-test) (quote cedn.schema-test))]
   (System/exit (if (pos? (+ (:fail r) (:error r))) 1 0)))'
 
-# 3. Linting — must report 0 errors, 0 warnings
+# 3. Tests (nbb / Node.js) — all must pass
+nbb -cp src:test -e '
+(require (quote cljs.test)
+         (quote cedn.error-test) (quote cedn.number-test)
+         (quote cedn.order-test) (quote cedn.schema-test)
+         (quote cedn.emit-test) (quote cedn.core-test))
+(cljs.test/run-tests
+  (quote cedn.error-test) (quote cedn.number-test)
+  (quote cedn.order-test) (quote cedn.schema-test)
+  (quote cedn.emit-test) (quote cedn.core-test))'
+
+# 4. Linting — must report 0 errors, 0 warnings
 clj-kondo --lint src test
 
-# 4. Formatting — must report all files correct
+# 5. Formatting — must report all files correct
 cljfmt check src test
 
 # Auto-fix formatting issues:
@@ -238,15 +249,41 @@ cedn.gen
 - **Cross-platform .cljc**: All files are `.cljc` with reader conditionals for
   JVM/CLJS differences (StringBuilder vs StringBuffer, format-double, #inst/#uuid).
 
+## Cross-Platform Notes
+
+### Babashka (bb)
+Done. Pure Clojure `ecma-reformat` serves both JVM and bb.
+`compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional).
+Full test suite passes (70 tests, 1,293 assertions).
+Cross-platform reference test verifies bb output matches JVM for 1,051 doubles.
+
+### nbb (Node.js Babashka)
+Done. Exercises `:cljs` reader conditional branches on the JS runtime via SCI.
+Full test suite passes (66 tests, 228 assertions).
+
+Key CLJS fixes:
+- `emit-string-char`: `(int ch)` → `.charCodeAt` (JS `(int "h")` returns 0)
+- `neg-zero?` guard: JS `(int? -0.0)` is true, so -0.0 needs explicit routing
+  to the double path to emit `"0.0"` instead of `"0"`
+- `format-inst`: uses `js/Date` (ms precision only, last 6 of 9 digits zero)
+- nbb uses `cljs.test/run-tests` (not `clojure.test/run-tests`)
+
+Platform-legitimate test differences (guarded with reader conditionals):
+- int/double distinction (JS has no separate types)
+- Ratios (`22/7` evaluates to a double in JS)
+- SHA-256 (nil on CLJS, no built-in crypto)
+- Nanosecond `#inst` (JS Date has ms precision only)
+
+### ClojureScript / Scittle
+All `.cljc` code exercises the `:cljs` branches correctly under nbb.
+Full CLJS (shadow-cljs) and Scittle setups should work with minimal effort.
+
 ## What's NOT Built Yet
 
 - **CEDN-R profile**: BigInt, BigDecimal, ratios.  Deprioritized indefinitely —
   KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
   for completeness, but no implementation work is planned.
-- **ClojureScript testing**: All code is `.cljc` ready, needs shadow-cljs setup.
-- **Babashka support**: Done. Pure Clojure `ecma-reformat` serves both JVM and bb.
-  `compare-strings` uses `.codePointAt` loop on bb. Full test suite passes (70 tests,
-  1,293 assertions). Cross-platform reference test verifies bb output matches JVM
-  for 1,051 doubles.
+- **Full ClojureScript build**: nbb validates `:cljs` branches. Shadow-cljs
+  setup for browser/Node CLJS builds not yet done.
 - **CLI tool**: Trivial Babashka wrapper, now unblocked.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.

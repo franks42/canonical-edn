@@ -296,10 +296,17 @@
     otherwise → throw unsupported-type"
   [sb profile value]
   ;; (cond
+  ;; CLJS notes:
+  ;;   - String chars: use .charCodeAt (not (int ch) which returns 0 in JS)
+  ;;   - Negative zero: (int? -0.0) is true in JS; neg-zero? guard
+  ;;     routes -0.0 to the double path to emit "0.0"
+  ;;   - #inst: js/Date has ms precision (last 6 of 9 digits always zero)
+  ;;   - #uuid: cljs.core/UUID, lowercased via .toLowerCase
+  ;;
   ;;   (nil? value)     (emit-nil sb)
   ;;   (boolean? value) (emit-boolean sb value)
-  ;;   (int? value)     (emit-integer sb profile value)
-  ;;   (double? value)  (emit-double sb value)
+  ;;   (int? value)     (emit-integer sb profile value)  ; CLJS: excludes neg-zero
+  ;;   (double? value)  (emit-double sb value)           ; CLJS: includes neg-zero
   ;;   (string? value)  (emit-string sb value)
   ;;   (keyword? value) (emit-keyword sb value)
   ;;   (symbol? value)  (emit-symbol sb value)
