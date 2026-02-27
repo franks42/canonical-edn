@@ -28,8 +28,12 @@ All 8 implementation steps are done and tested:
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: 71 tests, 242 assertions, 0 failures.**
+**Test results: 73 tests, 246 assertions, 0 failures.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
+
+**Persistent project memory is stored in MCP memory (tag: `cedn`).**
+Use `memory_search` with query "CEDN" or filter by tag "cedn" to retrieve
+design decisions, project state, and workflow notes across sessions.
 
 ## Reference Documents
 
@@ -159,10 +163,23 @@ the ONLY correct way to format doubles on the JVM — do NOT use
 ;=> (nil true 3 "b" :a)
 ```
 
-## Running Tests
+## Development: Test, Lint, Format
+
+All three checks must pass with zero errors and zero warnings before
+any commit.  Run on ALL source and test files, not just modified ones.
 
 ```bash
+# 1. Tests — all must pass
 clj -X:test
+
+# 2. Linting — must report 0 errors, 0 warnings
+clj-kondo --lint src test
+
+# 3. Formatting — must report all files correct
+cljfmt check src test
+
+# Auto-fix formatting issues:
+cljfmt fix src test
 ```
 
 ## Architecture Notes
