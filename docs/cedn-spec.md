@@ -695,11 +695,14 @@ Normative rules:
 
 ### 3.14. Tagged Literals: General Policy
 
-> **OPEN ISSUE (v1-draft):**  Whether CEDN-P v1 permits custom
-> tagged literals beyond `#inst` and `#uuid`, or restricts the
-> profile to only those two built-in tags.
->
-> If custom tags are permitted, the following rules apply:
+CEDN-P v1 restricts tagged literals to `#inst` and `#uuid` only.
+Custom tagged literals are not permitted in the portable profile.
+
+> **Rationale:**  Limiting to the two built-in tags keeps the
+> portable profile simple, self-contained, and interoperable
+> across all Clojure runtimes without requiring tag registries.
+
+If a future profile permits custom tags, the following rules apply:
 
 A general tagged literal `#tag value` is canonical if and only if:
 
@@ -834,16 +837,11 @@ Normative rules:
 
 ### 4.5. Characters
 
-> **OPEN ISSUE (v1-draft):**  Whether CEDN-R includes character
-> literals.  ClojureScript has no character type, so characters
-> are inherently non-portable.  They may be excluded even from
-> CEDN-R to simplify the specification.
+Character literals are excluded from CEDN-R.
 
-If included, the canonical form would be:
-
--  Named characters: `\newline`, `\return`, `\space`, `\tab`
--  Printable ASCII (U+0021–U+007E except `\`): `\x` (literal)
--  All other codepoints: `\uNNNN` (four lowercase hex digits)
+> **Rationale:**  ClojureScript has no character type, so characters
+> are inherently non-portable.  Excluding them simplifies the
+> specification and avoids cross-runtime incompatibility.
 
 ### 4.6. Ordering Extensions
 
