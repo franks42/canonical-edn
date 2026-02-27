@@ -165,6 +165,7 @@ cedn/
                       thheller/shadow-cljs {:mvn/version "2.28.23"}}}
   :cljs-test {:extra-paths ["test"]
               :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}}
+  :pprint {:extra-deps {zprint/zprint {:mvn/version "1.3.0"}}}
   :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.6"}
                  slipset/deps-deploy {:mvn/version "0.2.2"}}
           :ns-default build}}}
@@ -230,6 +231,11 @@ bb test:scittle      # Scittle (headless Chromium via Playwright)
 bb test:scittle-cdn  # Scittle loading from jsdelivr CDN
 bb test:jar          # JVM smoke test against installed Maven JAR
 bb test:nbb-dep      # nbb smoke test via git/local dep (nbb.edn pattern)
+
+# Pretty-print EDN without decoding (preserves canonical token forms)
+bb pprint file.edn          # from file
+bb pprint '{:b 2 :a 1}'     # from string argument
+echo '{:a 1}' | bb pprint   # from stdin
 
 # Lint & format
 bb lint         # clj-kondo
