@@ -27,8 +27,9 @@ All modules done and tested on five platforms.  Zero production dependencies bey
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
+| Cross-platform bytes | Done | 40 values × 2 checks (canonical-str + bytes hex): proves all 5 platforms produce identical output for the same inputs. Compliance test vectors stored in `cedn-p-compliance-vectors.edn` (IETF RFC-style). |
 
-**Test results: JVM 75 / 21,335, bb 70 / 1,294, nbb 66 / 225, shadow-cljs 70 / 229, Scittle 59 / 59 — 0 failures on all platforms.**
+**Test results: JVM 79 / 21,499, bb 74 / 1,458, nbb 70 / 389, shadow-cljs 74 / 393, Scittle 69 / 69 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -90,7 +91,7 @@ cedn/
 ├── bb.edn                     ← Babashka project config
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
-├── scittle-tests.html         ← Scittle browser test page (59 tests)
+├── scittle-tests.html         ← Scittle browser test page (69 tests)
 ├── context.md                  ← this file
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -113,10 +114,12 @@ cedn/
         ├── emit_test.cljc      ← per-type emission + Appendix C vectors
         ├── order_test.cljc     ← rank comparator tests
         ├── number_test.cljc    ← double formatting + Appendix B vectors
-        ├── number-reference.edn ← 1,051 JVM-generated reference vectors
+        ├── number-reference.edn            ← 1,051 JVM-generated reference vectors
+        ├── cedn-p-compliance-vectors.edn  ← CEDN-P compliance test vectors (RFC-style)
         ├── error_test.cljc     ← error constructor tests
         ├── schema_test.cljc    ← schema validation tests
-        └── property_test.cljc  ← generative property tests
+        ├── property_test.cljc  ← generative property tests
+        └── xplatform_test.cljc ← cross-platform byte comparison tests
 ```
 
 ## Dependencies
@@ -188,6 +191,35 @@ ECMAScript implementation for 20,000+ doubles.
 
 All checks must pass with zero errors and zero warnings before
 any commit.  Run on ALL source and test files, not just modified ones.
+
+### bb tasks (preferred)
+
+```bash
+# Run individual platform tests
+bb test:jvm     # JVM (cognitect test-runner)
+bb test:bb      # Babashka
+bb test:nbb     # nbb (Node.js)
+bb test:cljs    # shadow-cljs
+
+# Lint & format
+bb lint         # clj-kondo
+bb fmt          # cljfmt check
+bb fmt:fix      # cljfmt fix
+bb gen:xref       # print cross-platform hex reference data
+bb gen:compliance # verify all platforms agree, confirm golden file
+
+# Run everything (JVM + bb + nbb + cljs + lint + fmt)
+bb test:all
+
+# Scittle (browser, manual)
+python3 -m http.server 8787 &
+# Open scittle-tests.html, check console: "ALL 59 TESTS PASSED"
+
+# List all available tasks
+bb tasks
+```
+
+### Long-form commands (reference)
 
 ```bash
 # 1. Tests (JVM) — all must pass

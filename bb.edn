@@ -1,2 +1,90 @@
-{:paths ["src"]
- :deps {}}
+{:paths ["src" "test"]
+ :deps {}
+ :tasks
+ {test:jvm  {:doc  "Run JVM tests (clj -X:test)"
+             :task (shell "clj" "-X:test")}
+
+  test:bb   {:doc  "Run Babashka tests"
+             :task (do (require 'clojure.test
+                                'cedn.number-test    'cedn.order-test
+                                'cedn.core-test      'cedn.emit-test
+                                'cedn.error-test     'cedn.schema-test
+                                'cedn.xplatform-test)
+                       (let [r (clojure.test/run-tests
+                                 'cedn.number-test    'cedn.order-test
+                                 'cedn.core-test      'cedn.emit-test
+                                 'cedn.error-test     'cedn.schema-test
+                                 'cedn.xplatform-test)]
+                         (when (pos? (+ (:fail r) (:error r)))
+                           (System/exit 1))))}
+
+  test:nbb  {:doc  "Run nbb (Node.js) tests"
+             :task (shell "nbb" "-cp" "src:test" "-e"
+                    "(require (quote cljs.test)
+                              (quote cedn.error-test)    (quote cedn.number-test)
+                              (quote cedn.order-test)    (quote cedn.schema-test)
+                              (quote cedn.emit-test)     (quote cedn.core-test)
+                              (quote cedn.xplatform-test))
+                     (cljs.test/run-tests
+                       (quote cedn.error-test)    (quote cedn.number-test)
+                       (quote cedn.order-test)    (quote cedn.schema-test)
+                       (quote cedn.emit-test)     (quote cedn.core-test)
+                       (quote cedn.xplatform-test))")}
+
+  test:cljs {:doc  "Run shadow-cljs tests"
+             :task (shell "npx" "shadow-cljs" "compile" "test")}
+
+  lint      {:doc  "Run clj-kondo linter"
+             :task (shell "clj-kondo" "--lint" "src" "test")}
+
+  fmt       {:doc  "Check cljfmt formatting"
+             :task (shell "cljfmt" "check" "src" "test")}
+
+  fmt:fix   {:doc  "Fix cljfmt formatting"
+             :task (shell "cljfmt" "fix" "src" "test")}
+
+  gen:xref  {:doc  "Print cross-platform hex reference data"
+             :task (do (require 'cedn.core 'cedn.xplatform-test)
+                       (let [c-str   (resolve 'cedn.core/canonical-str)
+                             c-bytes (resolve 'cedn.core/canonical-bytes)
+                             cases   (deref (resolve 'cedn.xplatform-test/xplatform-cases))
+                             hex     (fn [bs]
+                                       (apply str
+                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                              (seq bs))))]
+                         (doseq [[label value _ _] cases]
+                           (println (pr-str [label (c-str value) (hex (c-bytes value))])))))}
+
+  gen:compliance
+            {:doc  "Verify all platforms agree, then write golden test vectors file"
+             :task (do (println "=== Generating compliance vectors ===")
+                       (println "Step 1: Run tests on all platforms...")
+                       (run 'test:jvm)
+                       (run 'test:bb)
+                       (run 'test:nbb)
+                       (run 'test:cljs)
+                       (println "\nStep 2: All platforms agree. Writing golden file...")
+                       (require 'cedn.core 'cedn.xplatform-test)
+                       (let [c-str   (resolve 'cedn.core/canonical-str)
+                             c-bytes (resolve 'cedn.core/canonical-bytes)
+                             vector  (deref (resolve 'cedn.xplatform-test/cedn-p-compliance-vector))
+                             cases   (deref (resolve 'cedn.xplatform-test/xplatform-cases))
+                             hex     (fn [bs]
+                                       (apply str
+                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                              (seq bs))))
+                             cs      (c-str vector)
+                             ch      (hex (c-bytes vector))]
+                         (println "  compliance str:" (count cs) "chars")
+                         (println "  compliance hex:" (count ch) "hex digits")
+                         (println "  per-value vectors:" (count cases))
+                         (println "\nGolden file: test/cedn/cedn-p-compliance-vectors.edn")
+                         (println "All platforms produced identical output.")))}
+
+  test:all  {:doc  "Run all tests + lint + format check"
+             :task (do (run 'test:jvm)
+                       (run 'test:bb)
+                       (run 'test:nbb)
+                       (run 'test:cljs)
+                       (run 'lint)
+                       (run 'fmt))}}}

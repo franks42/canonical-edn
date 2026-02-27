@@ -197,6 +197,24 @@
   (check-throws "NaN throws"   #(cedn/canonical-str js/NaN))
   (check-throws "Inf throws"   #(cedn/canonical-str js/Infinity))
 
+  ;; --- Cross-platform byte comparison ---
+  (section "cedn.core — cross-platform bytes")
+
+  (defn bytes->hex [bs]
+    (apply str (map (fn [b] (.padStart (.toString b 16) 2 "0"))
+                    (js/Array.from bs))))
+
+  (check "nil bytes"    "6e696c"                             (bytes->hex (cedn/canonical-bytes nil)))
+  (check "true bytes"   "74727565"                           (bytes->hex (cedn/canonical-bytes true)))
+  (check "int 42 bytes" "3432"                               (bytes->hex (cedn/canonical-bytes 42)))
+  (check "pi bytes"     "332e313431353932363533353839373933" (bytes->hex (cedn/canonical-bytes 3.141592653589793)))
+  (check "hello bytes"  "2268656c6c6f22"                     (bytes->hex (cedn/canonical-bytes "hello")))
+  (check "cafe bytes"   "22636166c3a922"                     (bytes->hex (cedn/canonical-bytes "café")))
+  (check ":foo bytes"   "3a666f6f"                           (bytes->hex (cedn/canonical-bytes :foo)))
+  (check "vec bytes"    "5b31203220335d"                     (bytes->hex (cedn/canonical-bytes [1 2 3])))
+  (check "map bytes"    "7b3a612031203a6220327d"             (bytes->hex (cedn/canonical-bytes {:b 2 :a 1})))
+  (check "set bytes"    "237b31203220337d"                   (bytes->hex (cedn/canonical-bytes #{3 1 2})))
+
   ;; === SUMMARY ===
   (let [{:keys [pass fail errors]} @results
         total (+ pass fail)]
