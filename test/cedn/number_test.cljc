@@ -1,6 +1,7 @@
 (ns cedn.number-test
   (:require [clojure.test :refer [deftest is are testing]]
-            [cedn.number :as number])
+            [cedn.number :as number]
+            #?(:clj [clojure.java.io :as io]))
   #?@(:bb []
       :clj [(:import [org.erdtman.jcs NumberToJSON])]))
 
@@ -44,6 +45,19 @@
   (testing "-Infinity throws"
     (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                  (number/format-double ##-Inf)))))
+
+#?(:cljs nil ;; reference test is JVM/bb only
+   :clj
+   (deftest format-double-cross-platform-reference-test
+     (testing "format-double matches JVM-generated reference (1051 doubles)"
+       (let [ref-data (read-string (slurp (io/resource "cedn/number-reference.edn")))]
+         (doseq [[bits expected] ref-data]
+           (let [x (Double/longBitsToDouble bits)]
+             (is (= expected (number/format-double x))
+                 (str "Reference mismatch for " x
+                      " (bits=" bits
+                      "): expected=" expected
+                      " got=" (number/format-double x)))))))))
 
 #?(:bb nil ;; JCS not available in bb
    :clj
