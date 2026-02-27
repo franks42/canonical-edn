@@ -10,8 +10,8 @@
             [cedn.schema :as schema]
             [clojure.edn :as edn])
   #?(:clj (:import [java.security MessageDigest]
-                    [java.time Instant]
-                    [java.util UUID])))
+                   [java.time Instant]
+                   [java.util UUID])))
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -138,7 +138,7 @@
   Use with clojure.edn/read-string for precision-preserving round-trips:
     (edn/read-string {:readers cedn/readers} canonical-edn-str)"
   #?(:clj  {'inst #(Instant/parse %)
-             'uuid #(UUID/fromString %)}
+            'uuid #(UUID/fromString %)}
      :cljs {'inst #(js/Date. %)
             'uuid cljs.core/uuid}))
 

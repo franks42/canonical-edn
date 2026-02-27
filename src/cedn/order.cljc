@@ -24,6 +24,43 @@
 
 (declare rank)
 
+(defn- compare-strings
+  "Compare two strings by Unicode codepoint order.
+  Equivalent to comparing UTF-8 byte sequences."
+  [^String a ^String b]
+  #?(:clj
+     (let [ai (.iterator (.codePoints a))
+           bi (.iterator (.codePoints b))]
+       (loop []
+         (let [a-has (.hasNext ai)
+               b-has (.hasNext bi)]
+           (cond
+             (and (not a-has) (not b-has)) 0
+             (not a-has) -1
+             (not b-has)  1
+             :else
+             (let [ac (.nextInt ai)
+                   bc (.nextInt bi)
+                   c  (compare ac bc)]
+               (if (zero? c)
+                 (recur)
+                 c))))))
+     :cljs
+     (let [aa (js/Array.from a)
+           ba (js/Array.from b)
+           alen (.-length aa)
+           blen (.-length ba)
+           limit (min alen blen)]
+       (loop [i 0]
+         (if (< i limit)
+           (let [ac (.codePointAt (aget aa i) 0)
+                 bc (.codePointAt (aget ba i) 0)
+                 c  (compare ac bc)]
+             (if (zero? c)
+               (recur (inc i))
+               c))
+           (compare alen blen))))))
+
 (defn- compare-numbers
   "Compare two numbers by mathematical value.
   When equal, integer ranks before double."
@@ -47,15 +84,15 @@
         bns (namespace b)]
     (cond
       (and (nil? ans) (nil? bns))
-      (compare (name a) (name b))
+      (compare-strings (name a) (name b))
 
       (nil? ans) -1
       (nil? bns)  1
 
       :else
-      (let [nsc (compare ans bns)]
+      (let [nsc (compare-strings ans bns)]
         (if (zero? nsc)
-          (compare (name a) (name b))
+          (compare-strings (name a) (name b))
           nsc)))))
 
 (defn- compare-sequential
@@ -103,7 +140,7 @@
   1. Compare by type-priority
   2. Within same type, compare by type-specific rules:
      - numbers: mathematical value (int before double if equal)
-     - strings: lexicographic (UTF-16 code unit order)
+     - strings: lexicographic (Unicode codepoint order)
      - keywords/symbols: namespace then name
      - seqs/vectors: element-by-element, shorter first
      - sets: cardinality, then pairwise elements
@@ -120,7 +157,7 @@
           0 0  ;; nil vs nil
           1 (compare a b)  ;; booleans: false < true
           2 (compare-numbers a b)
-          3 (compare a b)  ;; strings: native lexicographic
+          3 (compare-strings a b)  ;; strings: Unicode codepoint order
           4 (compare-named a b)
           5 (compare-named a b)
           6 (compare-sequential a b)  ;; lists/seqs

@@ -52,8 +52,11 @@ All 8 implementation steps are done and tested:
 
 3. **CEDN-R characters → excluded.**
 
-4. **String comparison ordering → UTF-16 code unit order.**
-   JVM `String.compareTo()` / JS `<` operator semantics.
+4. **String comparison ordering → Unicode codepoint order.**
+   Equivalent to UTF-8 byte order.  Platform-neutral: does not depend on
+   JVM/JS UTF-16 internals.  Matches the CEDN wire format (UTF-8).
+   Identical to UTF-16 code unit order for BMP-only strings; diverges
+   only for astral-plane characters (U+10000+).
 
 5. **`readers` map for canonical round-trips.**
    `cedn/readers` maps `#inst` → `Instant/parse` (JVM) and `#uuid` → `UUID/fromString` (JVM).

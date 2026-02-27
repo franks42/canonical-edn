@@ -925,26 +925,18 @@ integer < BigInt < double < BigDecimal < ratio.
 
 #### 5.3.4. Strings
 
-Strings are ordered lexicographically.
+Strings are ordered lexicographically by **Unicode codepoint value**
+(equivalently, by their UTF-8 encoded byte sequences).
 
-> **OPEN ISSUE (v1-draft):**  The comparison unit is not yet
-> frozen.  Candidates:
->
-> -  **UTF-8 byte order**: Compare the UTF-8 encoded byte
->    sequences.  Simplest mental model; matches the transmission
->    encoding.
-> -  **Unicode codepoint order**: Compare by Unicode scalar values.
->    Semantically cleanest; decodes UTF-16 surrogates.
-> -  **UTF-16 code unit order**: Compare by 16-bit code units.
->    Matches JVM `String.compareTo()` and JS `<` natively.
->
-> These three orderings produce IDENTICAL results for all strings
-> containing only BMP characters (U+0000–U+FFFF).  They diverge
-> only for strings containing characters above U+FFFF (emoji,
-> CJK Extension B, musical symbols, etc.).
->
-> The final choice will be accompanied by test vectors covering
-> astral-plane characters.
+> **Rationale:**  CEDN is a platform-neutral spec with a UTF-8 wire
+> format.  Basing sort order on UTF-16 code units — an encoding the
+> spec does not use — would leak a JVM/JS implementation detail into
+> the canonical form.  Codepoint order is encoding-agnostic, matches
+> the wire format, and any platform can implement it without knowledge
+> of surrogate pairs.  The three candidate orderings (UTF-8 byte,
+> codepoint, UTF-16 code unit) are identical for all BMP strings
+> (U+0000–U+FFFF); they diverge only for astral-plane characters
+> (U+10000+).
 
 #### 5.3.5. Keywords
 

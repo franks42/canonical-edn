@@ -336,7 +336,7 @@
   1. Compare by type-priority
   2. Within same type, compare by type-specific rules:
      - numbers: mathematical value (int before double if equal)
-     - strings: lexicographic (see §5.3.4 open issue)
+     - strings: lexicographic (Unicode codepoint order)
      - keywords/symbols: namespace then name
      - seqs/vectors: element-by-element, shorter first
      - sets: cardinality, then pairwise elements

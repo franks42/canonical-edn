@@ -3,7 +3,7 @@
             [cedn.core :as cedn]
             [clojure.edn :as edn])
   #?(:clj (:import [java.time Instant]
-                    [java.util Arrays Date UUID])))
+                   [java.util Arrays Date UUID])))
 
 ;; --- canonical-str ---
 

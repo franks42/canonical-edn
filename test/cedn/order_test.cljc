@@ -46,6 +46,20 @@
   (is (pos? (order/rank "b" "a")))
   (is (zero? (order/rank "abc" "abc"))))
 
+(deftest rank-strings-codepoint-order-test
+  (testing "astral-plane: codepoint order, not UTF-16 code unit order"
+    ;; U+FFFF (65535) < U+10000 (65536) in codepoint order
+    ;; but U+10000 encodes as surrogate pair D800 DC00 in UTF-16,
+    ;; so UTF-16 code unit order would put U+10000 before U+FFFF
+    (is (neg? (order/rank "\uFFFF" "\uD800\uDC00"))
+        "U+FFFF (65535) < U+10000 (65536) in codepoint order")
+    ;; U+1F600 (128512) > U+10000 (65536)
+    (is (pos? (order/rank "\uD83D\uDE00" "\uD800\uDC00"))
+        "U+1F600 (128512) > U+10000 (65536) in codepoint order")
+    ;; prefix test: "a" < "a𐀀"
+    (is (neg? (order/rank "a" "a\uD800\uDC00"))
+        "prefix: shorter string sorts first")))
+
 (deftest rank-keywords-test
   (testing "unqualified"
     (is (neg? (order/rank :a :b)))
@@ -55,6 +69,11 @@
   (testing "qualified by namespace then name"
     (is (neg? (order/rank :a/z :b/a)))
     (is (neg? (order/rank :ns/a :ns/b)))))
+
+(deftest rank-keywords-codepoint-order-test
+  (testing "astral-plane characters in keyword names use codepoint order"
+    (is (neg? (order/rank (keyword "\uFFFF") (keyword "\uD800\uDC00")))
+        "keyword with U+FFFF < keyword with U+10000 in codepoint order")))
 
 (deftest rank-symbols-test
   (is (neg? (order/rank 'a 'b)))
