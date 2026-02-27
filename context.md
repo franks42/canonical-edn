@@ -63,11 +63,11 @@ design decisions, project state, and workflow notes across sessions.
    only for astral-plane characters (U+10000+).
 
 5. **`readers` map for canonical round-trips.**
-   `cedn/readers` maps `#inst` → `Instant/parse` (JVM) and `#uuid` → `UUID/fromString` (JVM).
+   JVM: `cedn/readers` maps `#inst` → `Instant/parse` and `#uuid` → `UUID/fromString`.
    The default EDN reader produces `java.util.Date` (ms precision), losing sub-ms digits
    from the 9-fractional-digit canonical `#inst` form. `Instant/parse` preserves nanosecond
-   precision. `canonical?` uses `readers` internally so it correctly recognizes canonical
-   `#inst`/`#uuid` strings.
+   precision. CLJS: only overrides `#inst` → `js/Date.`; built-in EDN reader handles `#uuid`.
+   `canonical?` uses `readers` internally on all platforms.
 
 6. **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
    All policy statements must use only CEDN-P data types.  CEDN-R
@@ -268,12 +268,12 @@ cedn.gen
 ### Babashka (bb)
 Done. Pure Clojure `ecma-reformat` serves both JVM and bb.
 `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional).
-Full test suite passes (70 tests, 1,293 assertions).
+Full test suite passes (70 tests, 1,294 assertions).
 Cross-platform reference test verifies bb output matches JVM for 1,051 doubles.
 
 ### nbb (Node.js Babashka)
 Done. Exercises `:cljs` reader conditional branches on the JS runtime via SCI.
-Full test suite passes (66 tests, 228 assertions).
+Full test suite passes (66 tests, 225 assertions).
 
 Key CLJS fixes:
 - `emit-string-char`: `(int ch)` → `.charCodeAt` (JS `(int "h")` returns 0)

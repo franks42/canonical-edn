@@ -17,3 +17,4 @@ pom.xml.asc
 node_modules/
 out/
 .shadow-cljs/
+.playwright-mcp/

@@ -215,8 +215,9 @@
     to the same lowercase form."
   #?(:clj  {'inst #(Instant/parse %)
              'uuid #(UUID/fromString %)}
-     :cljs {'inst #(js/Date. %)
-            'uuid cljs.core/uuid}))
+     ;; CLJS: built-in #uuid reader already produces cljs.core/UUID.
+     ;; Only override #inst to ensure js/Date construction.
+     :cljs {'inst #(js/Date. %)}))
 
 (defn canonical?
   "Given an EDN string, returns true if it is already in
@@ -298,10 +299,10 @@
   ;; (cond
   ;; CLJS notes:
   ;;   - String chars: use .charCodeAt (not (int ch) which returns 0 in JS)
-  ;;   - Negative zero: (int? -0.0) is true in JS; neg-zero? guard
-  ;;     routes -0.0 to the double path to emit "0.0"
+  ;;   - Negative zero: JS -0.0 === 0 (same value); both emit as "0"
+  ;;     via integer path ("0.0" can't round-trip through edn/read-string)
   ;;   - #inst: js/Date has ms precision (last 6 of 9 digits always zero)
-  ;;   - #uuid: cljs.core/UUID, lowercased via .toLowerCase
+  ;;   - #uuid: uuid? predicate (cross-platform), lowercased via .toLowerCase
   ;;
   ;;   (nil? value)     (emit-nil sb)
   ;;   (boolean? value) (emit-boolean sb value)
