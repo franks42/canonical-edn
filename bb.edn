@@ -81,6 +81,16 @@
                                "nbb" "-cp" (str root "/test")
                                "-e" "(require 'nbb-smoke-test)"))}
 
+  pprint    {:doc  "Pretty-print EDN without decoding (file, string, or stdin)"
+             :task (let [arg   (first *command-line-args*)
+                         input (cond
+                                 (nil? arg)                    (slurp *in*)
+                                 (.exists (java.io.File. arg)) (slurp arg)
+                                 :else                         arg)]
+                     (shell {:in input}
+                            "clojure" "-M:pprint" "-e"
+                            "(require '[zprint.core :as zp]) (print (zp/zprint-file-str (slurp *in*) \"\" {:map {:sort? false}}))"))}
+
   lint      {:doc  "Run clj-kondo linter"
              :task (shell "clj-kondo" "--lint" "src" "test")}
 
