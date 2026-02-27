@@ -87,6 +87,7 @@ design decisions, project state, and workflow notes across sessions.
 ```
 cedn/
 ├── deps.edn
+├── bb.edn                     ← Babashka project config
 ├── context.md                  ← this file
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -229,7 +230,10 @@ cedn.gen
   KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
   for completeness, but no implementation work is planned.
 - **ClojureScript testing**: All code is `.cljc` ready, needs shadow-cljs setup.
-- **Babashka support**: JCS Java dependency unavailable in bb — needs pure-Clojure
-  fallback or bb pod for `format-double`.
+- **Babashka support**: Implemented. Pure Clojure `ecma-reformat` in `number.cljc`
+  post-processes `Double/toString` into ECMAScript format (`:bb` reader conditional).
+  `compare-strings` in `order.cljc` uses `.codePointAt` loop for bb (`.iterator`/`.nextInt`
+  unsupported). `bb.edn` provides paths config. JCS remains JVM production dependency;
+  cross-validation test confirms `ecma-reformat` matches JCS output.
 - **CLI tool**: Trivial Babashka wrapper once bb support exists.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.

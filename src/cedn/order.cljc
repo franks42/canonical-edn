@@ -28,7 +28,25 @@
   "Compare two strings by Unicode codepoint order.
   Equivalent to comparing UTF-8 byte sequences."
   [^String a ^String b]
-  #?(:clj
+  #?(:bb
+     (let [alen (.length a)
+           blen (.length b)]
+       (loop [ai 0 bi 0]
+         (let [a-end (>= ai alen)
+               b-end (>= bi blen)]
+           (cond
+             (and a-end b-end) 0
+             a-end -1
+             b-end  1
+             :else
+             (let [ac (.codePointAt a ai)
+                   bc (.codePointAt b bi)
+                   c  (compare ac bc)]
+               (if (zero? c)
+                 (recur (+ ai (Character/charCount ac))
+                        (+ bi (Character/charCount bc)))
+                 c))))))
+     :clj
      (let [ai (.iterator (.codePoints a))
            bi (.iterator (.codePoints b))]
        (loop []
