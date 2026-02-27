@@ -34,6 +34,27 @@
   test:cljs {:doc  "Run shadow-cljs tests"
              :task (shell "npx" "shadow-cljs" "compile" "test")}
 
+  build:scittle {:doc  "Concatenate CLJC sources into dist/cedn.cljc for Scittle/browser use"
+                 :task (let [sources ["src/cedn/error.cljc"
+                                      "src/cedn/number.cljc"
+                                      "src/cedn/order.cljc"
+                                      "src/cedn/schema.cljc"
+                                      "src/cedn/emit.cljc"
+                                      "src/cedn/core.cljc"]
+                             out     "dist/cedn.cljc"
+                             header  ";; Auto-generated — do not edit. Run: bb build:scittle\n;; Concatenated CEDN source in dependency order for Scittle/browser.\n\n"]
+                         (.mkdirs (java.io.File. "dist"))
+                         (spit out
+                               (str header
+                                    (clojure.string/join "\n\n"
+                                      (map slurp sources))
+                                    "\n"))
+                         (println "Wrote" out))}
+
+  test:scittle {:doc  "Run Scittle browser tests (headless Chromium via Playwright)"
+                :task (do (run 'build:scittle)
+                          (shell "node" "test/run-scittle.mjs"))}
+
   lint      {:doc  "Run clj-kondo linter"
              :task (shell "clj-kondo" "--lint" "src" "test")}
 
@@ -86,5 +107,6 @@
                        (run 'test:bb)
                        (run 'test:nbb)
                        (run 'test:cljs)
+                       (run 'test:scittle)
                        (run 'lint)
                        (run 'fmt))}}}

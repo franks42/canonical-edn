@@ -17,13 +17,9 @@
   <h1>CEDN Scittle Tests</h1>
   <pre id="output"></pre>
 
-  <!-- Load source files in dependency order (cache-bust with ?v=) -->
-  <script type="application/x-scittle" src="src/cedn/error.cljc?v=1"></script>
-  <script type="application/x-scittle" src="src/cedn/number.cljc?v=1"></script>
-  <script type="application/x-scittle" src="src/cedn/order.cljc?v=1"></script>
-  <script type="application/x-scittle" src="src/cedn/schema.cljc?v=1"></script>
-  <script type="application/x-scittle" src="src/cedn/emit.cljc?v=1"></script>
-  <script type="application/x-scittle" src="src/cedn/core.cljc?v=1"></script>
+  <!-- CEDN source — single concatenated file in dependency order -->
+  <!-- Rebuild with: bb build:scittle -->
+  <script type="application/x-scittle" src="dist/cedn.cljc"></script>
 
   <!-- Test runner -->
   <script type="application/x-scittle">

@@ -1,6 +1,7 @@
 {
   "private": true,
   "devDependencies": {
+    "playwright": "^1.55.0",
     "shadow-cljs": "^2.28.0"
   }
 }

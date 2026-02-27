@@ -92,6 +92,8 @@ cedn/
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
 ├── scittle-tests.html         ← Scittle browser test page (69 tests)
+├── dist/
+│   └── cedn.cljc              ← Concatenated CEDN source for Scittle/browser (auto-generated)
 ├── context.md                  ← this file
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -208,12 +210,16 @@ bb fmt:fix      # cljfmt fix
 bb gen:xref       # print cross-platform hex reference data
 bb gen:compliance # verify all platforms agree, confirm golden file
 
-# Run everything (JVM + bb + nbb + cljs + lint + fmt)
+# Run everything (JVM + bb + nbb + cljs + scittle + lint + fmt)
 bb test:all
 
-# Scittle (browser, manual)
-python3 -m http.server 8787 &
-# Open scittle-tests.html, check console: "ALL 59 TESTS PASSED"
+# Build concatenated Scittle source
+bb build:scittle   # → dist/cedn.cljc
+
+# Scittle (browser, automated via Playwright — auto-rebuilds dist/cedn.cljc)
+bb test:scittle
+
+# Prerequisite (one-time): npm install && npx playwright install chromium
 
 # List all available tasks
 bb tasks
@@ -251,10 +257,9 @@ nbb -cp src:test -e '
 # 4. Tests (shadow-cljs / full CLJS) — all must pass
 npx shadow-cljs compile test
 
-# 5. Tests (Scittle / browser) — all must pass
-#    Serve from project root, open scittle-tests.html in browser
-python3 -m http.server 8787 &
-#    Check console: "ALL 59 TESTS PASSED"
+# 5. Tests (Scittle / browser) — automated via Playwright
+node test/run-scittle.mjs
+# Prerequisite (one-time): npm install && npx playwright install chromium
 
 # 6. Linting — must report 0 errors, 0 warnings
 clj-kondo --lint src test
@@ -339,7 +344,9 @@ Scittle-specific fixes (SCI symbols not available):
 - `ExceptionInfo` → `(or (ex-data e) ...)` idiom (avoids bare symbol)
 - `uuid` macro → removed from CLJS readers (built-in EDN reader handles it)
 
-Serve and test: `python3 -m http.server 8787` then open `scittle-tests.html`.
+Build single-file bundle: `bb build:scittle` → `dist/cedn.cljc`.
+Automated test: `bb test:scittle` (rebuilds + headless Chromium via Playwright).
+CDN: `https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc`
 
 ## What's NOT Built Yet
 
