@@ -55,6 +55,9 @@
                 :task (do (run 'build:scittle)
                           (shell "node" "test/run-scittle.mjs"))}
 
+  test:scittle-cdn {:doc  "Run Scittle tests loading CEDN from jsdelivr CDN"
+                    :task (shell "node" "test/run-scittle-cdn.mjs")}
+
   lint      {:doc  "Run clj-kondo linter"
              :task (shell "clj-kondo" "--lint" "src" "test")}
 

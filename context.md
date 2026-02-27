@@ -13,7 +13,7 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1 implementation complete — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.**
+**v1.1.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.**
 
 All modules done and tested on five platforms.  Zero production dependencies beyond Clojure.
 
@@ -29,7 +29,7 @@ All modules done and tested on five platforms.  Zero production dependencies bey
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 | Cross-platform bytes | Done | 40 values × 2 checks (canonical-str + bytes hex): proves all 5 platforms produce identical output for the same inputs. Compliance test vectors stored in `cedn-p-compliance-vectors.edn` (IETF RFC-style). |
 
-**Test results: JVM 79 / 21,499, bb 74 / 1,458, nbb 70 / 389, shadow-cljs 74 / 393, Scittle 69 / 69 — 0 failures on all platforms.**
+**Test results: JVM 79 / 21,499, bb 74 / 1,458, nbb 70 / 389, shadow-cljs 74 / 393, Scittle 69 / 69, Scittle-CDN 28 / 28 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -91,10 +91,14 @@ cedn/
 ├── bb.edn                     ← Babashka project config
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
-├── scittle-tests.html         ← Scittle browser test page (69 tests)
+├── scittle-tests.html         ← Scittle browser test page (69 tests, loads dist/cedn.cljc)
 ├── dist/
 │   └── cedn.cljc              ← Concatenated CEDN source for Scittle/browser (auto-generated)
 ├── context.md                  ← this file
+├── test/
+│   ├── run-scittle.mjs        ← Playwright test runner (local, 69 tests)
+│   ├── run-scittle-cdn.mjs    ← Playwright test runner (jsdelivr CDN, 28 smoke tests)
+│   └── scittle-cdn-test.html  ← CDN smoke test page
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
 │   ├── cedn-spec.md            ← formal specification
@@ -198,10 +202,12 @@ any commit.  Run on ALL source and test files, not just modified ones.
 
 ```bash
 # Run individual platform tests
-bb test:jvm     # JVM (cognitect test-runner)
-bb test:bb      # Babashka
-bb test:nbb     # nbb (Node.js)
-bb test:cljs    # shadow-cljs
+bb test:jvm          # JVM (cognitect test-runner)
+bb test:bb           # Babashka
+bb test:nbb          # nbb (Node.js)
+bb test:cljs         # shadow-cljs
+bb test:scittle      # Scittle (headless Chromium via Playwright)
+bb test:scittle-cdn  # Scittle loading from jsdelivr CDN
 
 # Lint & format
 bb lint         # clj-kondo
@@ -336,8 +342,9 @@ Additional CLJS fixes for shadow-cljs:
 - Property tests 3 & 4 made cross-platform (vec comparison, TextDecoder)
 
 ### Scittle (browser)
-Done. Loads source files via `<script type="application/x-scittle">` tags
-with Scittle v0.8.31 CDN. 59 tests covering all modules pass in the browser.
+Done. Single concatenated bundle `dist/cedn.cljc` loaded via
+`<script type="application/x-scittle">` with Scittle v0.8.31 CDN.
+69 tests covering all modules pass in headless Chromium (Playwright).
 
 Scittle-specific fixes (SCI symbols not available):
 - `cljs.core/UUID` → `uuid?` (cross-platform predicate, works everywhere)
@@ -346,7 +353,14 @@ Scittle-specific fixes (SCI symbols not available):
 
 Build single-file bundle: `bb build:scittle` → `dist/cedn.cljc`.
 Automated test: `bb test:scittle` (rebuilds + headless Chromium via Playwright).
-CDN: `https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc`
+CDN smoke test: `bb test:scittle-cdn` (loads from jsdelivr, 28 tests).
+
+Browser usage (CDN):
+```html
+<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"></script>
+<script type="application/x-scittle"
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
+```
 
 ## What's NOT Built Yet
 

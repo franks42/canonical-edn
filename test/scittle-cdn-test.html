@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CEDN Scittle CDN Test</title>
+  <style>
+    body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; }
+    h1 { color: #00d4aa; }
+    .pass { color: #00d4aa; }
+    .fail { color: #ff6b6b; }
+    .summary { font-size: 1.2em; margin-top: 1em; padding: 0.5em; border: 1px solid #444; }
+    pre { white-space: pre-wrap; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"></script>
+</head>
+<body>
+  <h1>CEDN Scittle CDN Test</h1>
+  <p>Loads <code>cedn.cljc</code> from jsdelivr CDN — verifies the published bundle works.</p>
+  <pre id="output"></pre>
+
+  <!-- CEDN source from jsdelivr CDN -->
+  <script type="application/x-scittle"
+          src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
+
+  <!-- Smoke tests -->
+  <script type="application/x-scittle">
+  (ns scittle-cdn-test
+    (:require [cedn.core :as cedn]
+              [cedn.emit :as emit]
+              [cedn.order :as order]
+              [cedn.number :as number]
+              [cedn.schema :as schema]
+              [clojure.edn :as edn]))
+
+  ;; --- Minimal test framework ---
+  (def results (atom {:pass 0 :fail 0 :errors []}))
+  (def out-el (js/document.getElementById "output"))
+
+  (defn log [& args]
+    (let [msg (apply str args)]
+      (js/console.log msg)
+      (set! (.-textContent out-el)
+            (str (.-textContent out-el) msg "\n"))))
+
+  (defn pass! [name]
+    (swap! results update :pass inc))
+
+  (defn fail! [name expected actual]
+    (swap! results update :fail inc)
+    (swap! results update :errors conj
+           {:name name :expected expected :actual actual})
+    (log "  FAIL: " name)
+    (log "    expected: " (pr-str expected))
+    (log "    actual:   " (pr-str actual)))
+
+  (defn check [name expected actual]
+    (if (= expected actual)
+      (pass! name)
+      (fail! name expected actual)))
+
+  (defn check-throws [name f]
+    (try
+      (f)
+      (fail! name "exception" "no exception thrown")
+      (catch :default e
+        (pass! name))))
+
+  (defn section [name]
+    (log "\nTesting " name))
+
+  ;; === SMOKE TESTS ===
+
+  (log "CDN source: jsdelivr/gh/franks42/canonical-edn@main/dist/cedn.cljc")
+
+  (section "cedn.core — canonical-str")
+  (check "nil"        "nil"           (cedn/canonical-str nil))
+  (check "bool"       "true"          (cedn/canonical-str true))
+  (check "int"        "42"            (cedn/canonical-str 42))
+  (check "double"     "3.14"          (cedn/canonical-str 3.14))
+  (check "string"     "\"hello\""     (cedn/canonical-str "hello"))
+  (check "keyword"    ":foo"          (cedn/canonical-str :foo))
+  (check "symbol"     "bar"           (cedn/canonical-str 'bar))
+  (check "vector"     "[1 2 3]"       (cedn/canonical-str [1 2 3]))
+  (check "map sorted" "{:a 1 :b 2}"  (cedn/canonical-str {:b 2 :a 1}))
+  (check "set sorted" "#{1 2 3}"     (cedn/canonical-str #{3 1 2}))
+  (check "list"       "(1 2 3)"      (cedn/canonical-str '(1 2 3)))
+  (check "nested"     "{:a [1 2 3] :b #{:x :y}}"
+         (cedn/canonical-str {:b #{:y :x} :a [1 2 3]}))
+
+  (section "cedn.core — canonical-bytes")
+  (let [bs (cedn/canonical-bytes {:a 1})
+        s  (.decode (js/TextDecoder.) bs)]
+    (check "bytes->str" "{:a 1}" s))
+
+  (section "cedn.core — canonical?")
+  (check "canonical yes" true  (cedn/canonical? "{:a 1 :b 2}"))
+  (check "canonical no"  false (cedn/canonical? "{:b 2 :a 1}"))
+
+  (section "cedn.core — round-trip")
+  (let [v {:a [1 2 "three"] :b #{:x :y} :c true :d nil}
+        s1 (cedn/canonical-str v)
+        v2 (edn/read-string s1)
+        s2 (cedn/canonical-str v2)]
+    (check "round-trip idempotent" s1 s2))
+
+  (section "cedn.emit — tagged literals")
+  (let [d (js/Date. 0)]
+    (check "epoch inst" "#inst \"1970-01-01T00:00:00.000000000Z\""
+           (emit/emit-str :cedn-p d)))
+  (let [u (edn/read-string "#uuid \"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"")]
+    (check "uuid lowercase" "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
+           (emit/emit-str :cedn-p u)))
+
+  (section "cedn.order — rank")
+  (check "nil < true"  true (neg? (order/rank nil true)))
+  (check "true < 1"    true (neg? (order/rank true 1)))
+  (check "1 < \"a\""   true (neg? (order/rank 1 "a")))
+
+  (section "cedn.number — format-double")
+  (check "pi"       "3.14"  (number/format-double 3.14))
+  (check-throws "NaN throws" #(number/format-double js/NaN))
+
+  (section "cedn.schema — valid?")
+  (check "map valid"     true  (schema/valid? :cedn-p {:a [1 2 3]}))
+  (check "regex invalid" false (schema/valid? :cedn-p #"foo"))
+
+  (section "cedn.core — error cases")
+  (check-throws "regex throws" #(cedn/canonical-str #"foo"))
+  (check-throws "NaN throws"   #(cedn/canonical-str js/NaN))
+
+  (section "cross-platform bytes")
+  (defn bytes->hex [bs]
+    (apply str (map (fn [b] (.padStart (.toString b 16) 2 "0"))
+                    (js/Array.from bs))))
+  (check "map bytes" "7b3a612031203a6220327d"
+         (bytes->hex (cedn/canonical-bytes {:b 2 :a 1})))
+
+  ;; === SUMMARY ===
+  (let [{:keys [pass fail errors]} @results
+        total (+ pass fail)]
+    (log "\n========================================")
+    (if (zero? fail)
+      (log "ALL " total " CDN TESTS PASSED")
+      (do
+        (log "FAILED: " fail " of " total " tests")
+        (doseq [{:keys [name expected actual]} errors]
+          (log "  - " name ": expected " (pr-str expected)
+               ", got " (pr-str actual)))))
+    (log "========================================")
+    ;; Set window property for automated checking
+    (set! (.-cednTestResults js/window)
+          #js {:pass pass :fail fail :total total}))
+  </script>
+</body>
+</html>
