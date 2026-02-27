@@ -18,8 +18,7 @@
 
 (defn- uuid-value?
   [x]
-  #?(:clj  (instance? java.util.UUID x)
-     :cljs (instance? cljs.core/UUID x)))
+  (uuid? x))
 
 ;; --- Core recursive predicate ---
 

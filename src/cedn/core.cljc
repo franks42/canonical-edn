@@ -121,11 +121,9 @@
         :canonical nil
         :bytes     nil
         :sha-256   nil
-        :errors    [(if (instance? #?(:clj clojure.lang.ExceptionInfo
-                                      :cljs ExceptionInfo) e)
-                      (ex-data e)
-                      {:message #?(:clj (.getMessage ^Exception e)
-                                   :cljs (.-message e))})]
+        :errors    [(or (ex-data e)
+                        {:message #?(:clj (.getMessage ^Exception e)
+                                     :cljs (.-message e))})]
         :profile   profile}))))
 
 ;; =============================================================
@@ -139,8 +137,9 @@
     (edn/read-string {:readers cedn/readers} canonical-edn-str)"
   #?(:clj  {'inst #(Instant/parse %)
             'uuid #(UUID/fromString %)}
-     :cljs {'inst #(js/Date. %)
-            'uuid cljs.core/uuid}))
+     ;; CLJS: built-in #uuid reader already produces cljs.core/UUID.
+     ;; Only override #inst to ensure js/Date construction.
+     :cljs {'inst #(js/Date. %)}))
 
 (defn canonical?
   "Given an EDN string, returns true if it is already in canonical form."

@@ -227,8 +227,7 @@
       (.append sb (format-inst value))
       (.append sb \"))
 
-    #?(:clj  (instance? UUID value)
-       :cljs (instance? cljs.core/UUID value))
+    (uuid? value)
     (do
       (.append sb "#uuid \"")
       (.append sb (format-uuid value))

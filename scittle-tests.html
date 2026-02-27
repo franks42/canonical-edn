@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CEDN Scittle Tests</title>
+  <style>
+    body { font-family: monospace; margin: 2em; background: #1a1a2e; color: #e0e0e0; }
+    h1 { color: #00d4aa; }
+    .pass { color: #00d4aa; }
+    .fail { color: #ff6b6b; }
+    .summary { font-size: 1.2em; margin-top: 1em; padding: 0.5em; border: 1px solid #444; }
+    pre { white-space: pre-wrap; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"></script>
+</head>
+<body>
+  <h1>CEDN Scittle Tests</h1>
+  <pre id="output"></pre>
+
+  <!-- Load source files in dependency order (cache-bust with ?v=) -->
+  <script type="application/x-scittle" src="src/cedn/error.cljc?v=1"></script>
+  <script type="application/x-scittle" src="src/cedn/number.cljc?v=1"></script>
+  <script type="application/x-scittle" src="src/cedn/order.cljc?v=1"></script>
+  <script type="application/x-scittle" src="src/cedn/schema.cljc?v=1"></script>
+  <script type="application/x-scittle" src="src/cedn/emit.cljc?v=1"></script>
+  <script type="application/x-scittle" src="src/cedn/core.cljc?v=1"></script>
+
+  <!-- Test runner -->
+  <script type="application/x-scittle">
+  (ns scittle-tests
+    (:require [cedn.core :as cedn]
+              [cedn.emit :as emit]
+              [cedn.order :as order]
+              [cedn.number :as number]
+              [cedn.schema :as schema]
+              [cedn.error :as err]
+              [clojure.edn :as edn]))
+
+  ;; --- Minimal test framework ---
+  (def results (atom {:pass 0 :fail 0 :errors []}))
+  (def out-el (js/document.getElementById "output"))
+
+  (defn log [& args]
+    (let [msg (apply str args)]
+      (js/console.log msg)
+      (set! (.-textContent out-el)
+            (str (.-textContent out-el) msg "\n"))))
+
+  (defn pass! [name]
+    (swap! results update :pass inc))
+
+  (defn fail! [name expected actual]
+    (swap! results update :fail inc)
+    (swap! results update :errors conj
+           {:name name :expected expected :actual actual})
+    (log "  FAIL: " name)
+    (log "    expected: " (pr-str expected))
+    (log "    actual:   " (pr-str actual)))
+
+  (defn check [name expected actual]
+    (if (= expected actual)
+      (pass! name)
+      (fail! name expected actual)))
+
+  (defn check-throws [name f]
+    (try
+      (f)
+      (fail! name "exception" "no exception thrown")
+      (catch :default e
+        (pass! name))))
+
+  (defn section [name]
+    (log "\nTesting " name))
+
+  ;; === TESTS ===
+
+  ;; --- emit basics ---
+  (section "cedn.emit — nil, boolean, integer")
+  (check "nil"       "nil"   (emit/emit-str :cedn-p nil))
+  (check "true"      "true"  (emit/emit-str :cedn-p true))
+  (check "false"     "false" (emit/emit-str :cedn-p false))
+  (check "int 42"    "42"    (emit/emit-str :cedn-p 42))
+  (check "int -7"    "-7"    (emit/emit-str :cedn-p -7))
+  (check "int 0"     "0"     (emit/emit-str :cedn-p 0))
+
+  (section "cedn.emit — doubles")
+  (check "3.14"      "3.14"  (emit/emit-str :cedn-p 3.14))
+  (check "-0.0"      "0"     (emit/emit-str :cedn-p -0.0))
+
+  (section "cedn.emit — strings")
+  (check "empty"     "\"\""          (emit/emit-str :cedn-p ""))
+  (check "hello"     "\"hello\""     (emit/emit-str :cedn-p "hello"))
+  (check "tab"       "\"a\\tb\""     (emit/emit-str :cedn-p "a\tb"))
+  (check "newline"   "\"a\\nb\""     (emit/emit-str :cedn-p "a\nb"))
+  (check "quote"     "\"a\\\"b\""    (emit/emit-str :cedn-p "a\"b"))
+  (check "backslash" "\"a\\\\b\""    (emit/emit-str :cedn-p "a\\b"))
+  (check "null char" "\"\\u0000\""   (emit/emit-str :cedn-p "\u0000"))
+  (check "cafe"      "\"caf\u00e9\"" (emit/emit-str :cedn-p "caf\u00e9"))
+
+  (section "cedn.emit — keywords, symbols")
+  (check ":foo"      ":foo"     (emit/emit-str :cedn-p :foo))
+  (check ":ns/bar"   ":ns/bar"  (emit/emit-str :cedn-p :ns/bar))
+  (check "sym foo"   "foo"      (emit/emit-str :cedn-p 'foo))
+  (check "sym ns/b"  "ns/bar"   (emit/emit-str :cedn-p 'ns/bar))
+
+  (section "cedn.emit — collections")
+  (check "list ()"     "()"        (emit/emit-str :cedn-p '()))
+  (check "list (1 2)"  "(1 2 3)"   (emit/emit-str :cedn-p '(1 2 3)))
+  (check "vec []"      "[]"        (emit/emit-str :cedn-p []))
+  (check "vec [1 2 3]" "[1 2 3]"   (emit/emit-str :cedn-p [1 2 3]))
+  (check "set #{}"     "#{}"       (emit/emit-str :cedn-p #{}))
+  (check "set sorted"  "#{1 2 3}"  (emit/emit-str :cedn-p #{3 1 2}))
+  (check "map {}"      "{}"        (emit/emit-str :cedn-p {}))
+  (check "map sorted"  "{:a 1 :b 2}" (emit/emit-str :cedn-p {:b 2 :a 1}))
+
+  (section "cedn.emit — #inst")
+  (let [d (js/Date. 0)]
+    (check "epoch inst" "#inst \"1970-01-01T00:00:00.000000000Z\""
+           (emit/emit-str :cedn-p d)))
+  (let [d (js/Date. 1740571200123)]
+    (check "inst ends 000000Z" true
+           (.endsWith (emit/emit-str :cedn-p d) "000000Z\"")))
+
+  (section "cedn.emit — #uuid")
+  (let [u (edn/read-string "#uuid \"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"")]
+    (check "uuid lowercase" "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
+           (emit/emit-str :cedn-p u)))
+
+  ;; --- cross-type ordering (Appendix C.3) ---
+  (section "cedn.emit — cross-type set (C.3)")
+  (check "mixed-type set"
+         "#{nil true 3.14 42 \"str\" :kw (2) [1] #{} {}}"
+         (emit/emit-str :cedn-p #{:kw "str" true 42 nil [1] '(2) #{} {} 3.14}))
+
+  ;; --- order/rank ---
+  (section "cedn.order — rank")
+  (check "nil < true"    true (neg? (order/rank nil true)))
+  (check "true < 1"      true (neg? (order/rank true 1)))
+  (check "1 < \"a\""     true (neg? (order/rank 1 "a")))
+  (check "\"a\" < :a"    true (neg? (order/rank "a" :a)))
+  (check ":a < 'a"       true (neg? (order/rank :a 'a)))
+
+  ;; --- number formatting ---
+  (section "cedn.number — format-double")
+  (check "pi"       "3.14"  (number/format-double 3.14))
+  (check "neg zero" "0.0"   (number/format-double 0.0))
+  (check "1e20"     "100000000000000000000.0" (number/format-double 1e20))
+  (check-throws "NaN throws" #(number/format-double js/NaN))
+  (check-throws "Inf throws" #(number/format-double js/Infinity))
+
+  ;; --- schema validation ---
+  (section "cedn.schema — valid?")
+  (check "nil valid"     true  (schema/valid? :cedn-p nil))
+  (check "int valid"     true  (schema/valid? :cedn-p 42))
+  (check "string valid"  true  (schema/valid? :cedn-p "hello"))
+  (check "map valid"     true  (schema/valid? :cedn-p {:a [1 2 3]}))
+  (check "regex invalid" false (schema/valid? :cedn-p #"foo"))
+
+  ;; --- core API ---
+  (section "cedn.core — canonical-str")
+  (check "str map"  "{:a 1 :b 2}" (cedn/canonical-str {:b 2 :a 1}))
+  (check "str vec"  "[1 2 3]"     (cedn/canonical-str [1 2 3]))
+  (check "str nested" "{:a [1 2 3] :b #{:x :y}}"
+         (cedn/canonical-str {:b #{:y :x} :a [1 2 3]}))
+
+  (section "cedn.core — canonical-bytes")
+  (let [bs (cedn/canonical-bytes {:a 1})
+        s  (.decode (js/TextDecoder.) bs)]
+    (check "bytes->str" "{:a 1}" s))
+
+  (section "cedn.core — canonical?")
+  (check "canonical yes" true  (cedn/canonical? "{:a 1 :b 2}"))
+  (check "canonical no"  false (cedn/canonical? "{:b 2 :a 1}"))
+
+  (section "cedn.core — round-trip")
+  (let [v {:a [1 2 "three"] :b #{:x :y} :c true :d nil}
+        s1 (cedn/canonical-str v)
+        v2 (edn/read-string s1)
+        s2 (cedn/canonical-str v2)]
+    (check "round-trip idempotent" s1 s2))
+
+  (let [d (js/Date. 1740571200000)
+        s1 (cedn/canonical-str d)
+        v2 (edn/read-string s1)
+        s2 (cedn/canonical-str v2)]
+    (check "inst round-trip" s1 s2))
+
+  (let [u (edn/read-string "#uuid \"550e8400-e29b-41d4-a716-446655440000\"")
+        s1 (cedn/canonical-str u)
+        v2 (edn/read-string s1)
+        s2 (cedn/canonical-str v2)]
+    (check "uuid round-trip" s1 s2))
+
+  ;; --- Error cases ---
+  (section "cedn.core — error cases")
+  (check-throws "regex throws" #(cedn/canonical-str #"foo"))
+  (check-throws "NaN throws"   #(cedn/canonical-str js/NaN))
+  (check-throws "Inf throws"   #(cedn/canonical-str js/Infinity))
+
+  ;; === SUMMARY ===
+  (let [{:keys [pass fail errors]} @results
+        total (+ pass fail)]
+    (log "\n========================================")
+    (if (zero? fail)
+      (log "ALL " total " TESTS PASSED")
+      (do
+        (log "FAILED: " fail " of " total " tests")
+        (doseq [{:keys [name expected actual]} errors]
+          (log "  - " name ": expected " (pr-str expected)
+               ", got " (pr-str actual)))))
+    (log "========================================")
+    ;; Set window property for automated checking
+    (set! (.-cednTestResults js/window)
+          #js {:pass pass :fail fail :total total}))
+  </script>
+</body>
+</html>
