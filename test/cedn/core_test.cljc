@@ -32,13 +32,13 @@
       (is (= "42" #?(:clj (String. ^bytes bs "UTF-8")
                      :cljs (.decode (js/TextDecoder.) bs)))))))
 
-#?(:clj
-   (deftest canonical-bytes-determinism-test
-     (testing "same value produces same bytes"
-       (let [v {:a [1 2 #{:x :y}] :b "hello"}
-             b1 (cedn/canonical-bytes v)
-             b2 (cedn/canonical-bytes v)]
-         (is (Arrays/equals ^bytes b1 ^bytes b2))))))
+(deftest canonical-bytes-determinism-test
+  (testing "same value produces same bytes"
+    (let [v {:a [1 2 #{:x :y}] :b "hello"}
+          b1 (cedn/canonical-bytes v)
+          b2 (cedn/canonical-bytes v)]
+      (is #?(:clj  (Arrays/equals ^bytes b1 ^bytes b2)
+             :cljs (= (vec b1) (vec b2)))))))
 
 ;; --- Round-trip stability ---
 
@@ -61,8 +61,10 @@
       #{1 2 3}
       {:a 1 :b 2}
       {:nested [1 #{:a :b} "x"]}
-      #?@(:clj [(Date. 1740571200123)
-                (UUID/fromString "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")]))))
+      #?@(:clj  [(Date. 1740571200123)
+                 (UUID/fromString "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")]
+          :cljs [(js/Date. 1740571200123)
+                 (uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")]))))
 
 #?(:clj
    (deftest inst-round-trip-with-readers-test
@@ -87,6 +89,26 @@
              s1   (cedn/canonical-str uuid)
              v2   (edn/read-string {:readers cedn/readers} s1)
              s2   (cedn/canonical-str v2)]
+         (is (= s1 s2))
+         (is (= s1 "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""))))))
+
+#?(:cljs
+   (deftest inst-round-trip-cljs-test
+     (testing "ms-precision js/Date round-trips through canonical-str"
+       (let [d  (js/Date. 1740571200123)
+             s1 (cedn/canonical-str d)
+             v2 (edn/read-string s1)
+             s2 (cedn/canonical-str v2)]
+         (is (= s1 s2))
+         (is (= s1 "#inst \"2025-02-26T12:00:00.123000000Z\""))))))
+
+#?(:cljs
+   (deftest uuid-round-trip-cljs-test
+     (testing "UUID canonicalizes to lowercase and round-trips"
+       (let [u  (uuid "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6")
+             s1 (cedn/canonical-str u)
+             v2 (edn/read-string s1)
+             s2 (cedn/canonical-str v2)]
          (is (= s1 s2))
          (is (= s1 "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""))))))
 
@@ -117,8 +139,11 @@
     (is (= :ok (:status result)))
     (is (= "{:a 1 :b 2}" (:canonical result)))
     (is (some? (:bytes result)))
-    (is (string? (:sha-256 result)))
-    (is (= 64 (count (:sha-256 result))))
+    ;; SHA-256 is nil on CLJS (no built-in crypto)
+    #?(:clj
+       (do
+         (is (string? (:sha-256 result)))
+         (is (= 64 (count (:sha-256 result))))))
     (is (nil? (:errors result)))))
 
 (deftest inspect-error-test
@@ -135,7 +160,9 @@
   (is (cedn/canonical? "{:a 1 :b 2}"))
   (is (not (cedn/canonical? "{:b 2 :a 1}")))
   (is (not (cedn/canonical? "not valid edn %%")))
-  (is (cedn/canonical? "#inst \"2025-02-26T12:00:00.123456789Z\""))
+  ;; Nanosecond #inst only round-trips on JVM (JS Date has ms precision)
+  #?(:clj  (is (cedn/canonical? "#inst \"2025-02-26T12:00:00.123456789Z\""))
+     :cljs (is (cedn/canonical? "#inst \"2025-02-26T12:00:00.123000000Z\"")))
   (is (cedn/canonical? "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"")))
 
 ;; --- rank ---

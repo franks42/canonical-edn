@@ -21,12 +21,13 @@
     0   "0"))
 
 (deftest emit-double-test
-  (are [input expected]
-       (= expected (emit/emit-str :cedn-p input))
-    3.14  "3.14"
-    1.0   "1.0"
-    0.0   "0.0"
-    -0.0  "0.0"))
+  (is (= "3.14" (emit/emit-str :cedn-p 3.14)))
+  (is (= "0.0" (emit/emit-str :cedn-p -0.0)))
+  ;; In JS, 1.0 and 0.0 are indistinguishable from integer 1 and 0
+  #?(:clj
+     (do
+       (is (= "1.0" (emit/emit-str :cedn-p 1.0)))
+       (is (= "0.0" (emit/emit-str :cedn-p 0.0))))))
 
 (deftest emit-string-basic-test
   (are [input expected]
@@ -117,6 +118,17 @@
        (is (= "#inst \"1970-01-01T00:00:00.000000000Z\""
               (emit/emit-str :cedn-p (Date. 0)))))))
 
+#?(:cljs
+   (deftest emit-inst-js-date-test
+     (testing "js/Date (ms precision, last 6 digits zero)"
+       (let [d (js/Date. 1740571200123)
+             s (emit/emit-str :cedn-p d)]
+         (is (re-matches #"#inst \"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{9}Z\"" s))
+         (is (.endsWith s "000000Z\""))))
+     (testing "epoch js/Date"
+       (is (= "#inst \"1970-01-01T00:00:00.000000000Z\""
+              (emit/emit-str :cedn-p (js/Date. 0)))))))
+
 ;; --- #uuid ---
 
 #?(:clj
@@ -126,14 +138,23 @@
          (is (= "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
                 (emit/emit-str :cedn-p u)))))))
 
+#?(:cljs
+   (deftest emit-uuid-cljs-test
+     (testing "lowercase 8-4-4-4-12"
+       (let [u (uuid "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6")]
+         (is (= "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
+                (emit/emit-str :cedn-p u)))))))
+
 ;; --- Error cases ---
 
 (deftest emit-unsupported-type-test
-  (testing "ratios throw"
-    (is (thrown-with-msg?
-         #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
-         #"unsupported type"
-         (emit/emit-str :cedn-p 22/7))))
+  ;; In JS, 22/7 evaluates to a double (3.142857...) — not a ratio
+  #?(:clj
+     (testing "ratios throw"
+       (is (thrown-with-msg?
+            clojure.lang.ExceptionInfo
+            #"unsupported type"
+            (emit/emit-str :cedn-p 22/7)))))
   (testing "regex throws"
     (is (thrown-with-msg?
          #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)

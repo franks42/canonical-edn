@@ -14,18 +14,25 @@
                     [java.util Date UUID])
      :cljs (:import [goog.string StringBuffer])))
 
+;; --- CLJS: negative-zero detection ---
+;; In JS, (int? -0.0) is true, but -0.0 must go through the double path
+;; to emit "0.0" (not "0").  Detect via 1/x = -Infinity.
+#?(:cljs
+   (defn- neg-zero? [x]
+     (and (zero? x) (neg? (/ 1 x)))))
+
 ;; --- String escaping per §3.5 ---
 
 (defn- escape-control-char
   "Format a control char as \\uNNNN."
   [c]
   #?(:clj  (format "\\u%04x" (int c))
-     :cljs (str "\\u" (.padStart (.toString (int c) 16) 4 "0"))))
+     :cljs (str "\\u" (.padStart (.toString (.charCodeAt c 0) 16) 4 "0"))))
 
 (defn- emit-string-char
   "Append the canonical escape for a single character."
   [^StringBuilder sb ch]
-  (let [c (int ch)]
+  (let [c #?(:clj (int ch) :cljs (.charCodeAt ch 0))]
     (case ch
       \" (.append sb "\\\"")
       \\ (.append sb "\\\\")
@@ -162,7 +169,8 @@
     (boolean? value)
     (.append sb (if value "true" "false"))
 
-    (int? value)
+    (and (int? value)
+         #?(:clj true :cljs (not (neg-zero? value))))
     (do
       #?(:clj
          (when-not (and (>= (long value) -9223372036854775808)
@@ -172,7 +180,8 @@
 
     #?(:clj  (instance? Double value)
        :cljs (and (number? value)
-                  (not (int? value))))
+                  (or (not (int? value))
+                      (neg-zero? value))))
     (.append sb (number/format-double value))
 
     (string? value)

@@ -34,9 +34,10 @@
   (testing "doubles by value"
     (is (neg? (order/rank 1.0 2.0)))
     (is (pos? (order/rank 5.0 3.0))))
-  (testing "cross-type: same value, int < double"
-    (is (neg? (order/rank 1 1.0)))
-    (is (pos? (order/rank 1.0 1))))
+  #?(:clj
+     (testing "cross-type: same value, int < double"
+       (is (neg? (order/rank 1 1.0)))
+       (is (pos? (order/rank 1.0 1)))))
   (testing "cross-type: different values"
     (is (neg? (order/rank 3.14 42)))
     (is (neg? (order/rank 1 2.5)))))
