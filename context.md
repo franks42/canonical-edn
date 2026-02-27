@@ -120,25 +120,26 @@ cedn/
 ```clojure
 ;; deps.edn
 {:paths ["src"]
- :deps {org.clojure/clojure              {:mvn/version "1.12.0"}
-        io.github.erdtman/java-json-canonicalization {:mvn/version "1.1"}}
+ :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {io.github.cognitect-labs/test-runner
                        {:git/tag "v0.5.1"
                         :git/sha "dfb30dd6605cb6c0efc275e1df1736f6e90d4d73"
                         :git/url "https://github.com/cognitect-labs/test-runner"}
-                       org.clojure/test.check {:mvn/version "1.1.1"}}
+                       org.clojure/test.check {:mvn/version "1.1.1"}
+                       io.github.erdtman/java-json-canonicalization {:mvn/version "1.1"}}
          :main-opts   ["-m" "cognitect.test-runner"]
          :exec-fn     cognitect.test-runner.api/test}
   :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}}}}}
 ```
 
-The `java-json-canonicalization` dependency provides
-`org.erdtman.jcs.NumberToJSON.serializeNumber()` which implements
-the ECMAScript Number serialization algorithm on the JVM.  This is
-the ONLY correct way to format doubles on the JVM — do NOT use
-`Double.toString()`.
+The only production dependency is Clojure itself.  Double formatting
+uses a pure Clojure `ecma-reformat` that post-processes `Double/toString`
+(JDK 17+ Schubfach algorithm) into ECMAScript Number::toString format.
+The `java-json-canonicalization` library (JCS) is a **test-only**
+dependency used to cross-validate `ecma-reformat` against the reference
+ECMAScript implementation for 20,000+ doubles.
 
 ## Usage
 

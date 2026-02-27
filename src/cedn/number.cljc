@@ -2,21 +2,14 @@
   "ECMAScript-compatible double formatting per ECMA-262 §7.1.12.1,
   with EDN .0 suffix adaptation.
 
-  On JVM: delegates to org.erdtman.jcs.NumberToJSON.serializeNumber(),
-  then applies .0 suffix rule and -0.0 normalization.
-
-  On Babashka: pure Clojure reformatter post-processes Double/toString
-  into ECMAScript format, then applies .0 suffix rule.
+  On JVM/Babashka: pure Clojure reformatter post-processes Double/toString
+  (JDK 17+ Schubfach) into ECMAScript format, then applies .0 suffix rule.
 
   On JS: trivial — Number.prototype.toString() IS the spec."
   (:require [cedn.error :as err]
-            [clojure.string :as str])
-  #?@(:bb []
-      :clj [(:import [org.erdtman.jcs NumberToJSON])]))
+            [clojure.string :as str]))
 
 #?(:clj
-   ;; Used by :bb branch of format-double; invisible to clj-kondo's :clj analysis
-   #_{:clj-kondo/ignore [:unused-private-var]}
    (defn- ecma-reformat
      "Reformat Double/toString output (JDK 17+ Schubfach) into
   ECMAScript Number::toString format per ECMA-262 §7.1.12.1.
@@ -97,23 +90,13 @@
 
   Cross-platform: identical output on JVM, Babashka, and JS."
   [x]
-  #?(:bb
+  #?(:clj
      (do
        (when (or (Double/isNaN x) (Double/isInfinite x))
          (err/invalid-number! x))
        (if (and (zero? x) (neg? (Math/copySign 1.0 x)))
          "0.0"
          (let [s (ecma-reformat (Double/toString x))]
-           (if (or (str/includes? s ".") (str/includes? s "e"))
-             s
-             (str s ".0")))))
-     :clj
-     (do
-       (when (or (Double/isNaN x) (Double/isInfinite x))
-         (err/invalid-number! x))
-       (if (and (zero? x) (neg? (Math/copySign 1.0 x)))
-         "0.0"
-         (let [s (NumberToJSON/serializeNumber x)]
            (if (or (str/includes? s ".") (str/includes? s "e"))
              s
              (str s ".0")))))
