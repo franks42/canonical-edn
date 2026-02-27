@@ -24,11 +24,11 @@ All 8 implementation steps are done and tested:
 | `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering |
 | `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection |
 | `cedn.schema` | Done | Malli schemas for CEDN-P with recursive registry, `schema-for`/`valid?`/`explain` |
-| `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank` |
+| `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: 69 tests, 233 assertions, 0 failures.**
+**Test results: 71 tests, 242 assertions, 0 failures.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 ## Reference Documents
@@ -55,6 +55,13 @@ All 8 implementation steps are done and tested:
 4. **String comparison ordering → UTF-16 code unit order.**
    JVM `String.compareTo()` / JS `<` operator semantics.
 
+5. **`readers` map for canonical round-trips.**
+   `cedn/readers` maps `#inst` → `Instant/parse` (JVM) and `#uuid` → `UUID/fromString` (JVM).
+   The default EDN reader produces `java.util.Date` (ms precision), losing sub-ms digits
+   from the 9-fractional-digit canonical `#inst` form. `Instant/parse` preserves nanosecond
+   precision. `canonical?` uses `readers` internally so it correctly recognizes canonical
+   `#inst`/`#uuid` strings.
+
 ## Project Structure
 
 ```
@@ -69,7 +76,7 @@ cedn/
 │   └── kex-sources.md          ← reference links
 ├── src/
 │   └── cedn/
-│       ├── core.cljc           ← public API (7 functions + rank)
+│       ├── core.cljc           ← public API (7 functions + rank + readers)
 │       ├── emit.cljc           ← per-type canonical emission
 │       ├── order.cljc          ← rank comparator
 │       ├── number.cljc         ← ECMAScript double formatting
@@ -137,6 +144,12 @@ the ONLY correct way to format doubles on the JVM — do NOT use
 ;; Check if a string is already canonical
 (cedn/canonical? "{:a 1 :b 2}")  ;=> true
 (cedn/canonical? "{:b 2 :a 1}")  ;=> false
+
+;; Round-trip with precision-preserving readers
+(require '[clojure.edn :as edn])
+(let [s (cedn/canonical-str (java.time.Instant/parse "2025-02-26T12:00:00.123456789Z"))]
+  (edn/read-string {:readers cedn/readers} s))
+;=> #object[java.time.Instant "2025-02-26T12:00:00.123456789Z"]
 
 ;; Total ordering comparator
 (sort cedn/rank [3 :a nil true "b"])

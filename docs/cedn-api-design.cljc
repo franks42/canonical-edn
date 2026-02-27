@@ -61,7 +61,11 @@
   (:require [cedn.emit   :as emit]
             [cedn.order  :as order]
             [cedn.schema :as schema]
-            [cedn.error  :as err]))
+            [cedn.error  :as err]
+            [clojure.edn :as edn])
+  #?(:clj (:import [java.security MessageDigest]
+                    [java.time Instant]
+                    [java.util UUID])))
 
 
 ;; =============================================================
@@ -187,27 +191,50 @@
    ;; try/catch around canonical-bytes, assemble result map
    ))
 
+;; =============================================================
+;; 4. Canonical readers for round-tripping
+;; =============================================================
+
+(def readers
+  "EDN readers that produce canonical Clojure data types.
+
+  Use with clojure.edn/read-string for precision-preserving round-trips:
+    (edn/read-string {:readers cedn/readers} canonical-edn-str)
+
+  Why this matters:
+  - #inst: The default EDN reader produces java.util.Date (ms precision),
+    but canonical form uses 9 fractional digits (ns). Instant/parse
+    preserves full nanosecond precision for identical re-canonicalization.
+  - #uuid: UUID/fromString is explicit and portable. Canonical form
+    lowercases hex; the reader must produce a UUID that re-canonicalizes
+    to the same lowercase form."
+  #?(:clj  {'inst #(Instant/parse %)
+             'uuid #(UUID/fromString %)}
+     :cljs {'inst #(js/Date. %)
+            'uuid cljs.core/uuid}))
+
 (defn canonical?
   "Given an EDN string, returns true if it is already in
   canonical form for the given profile.
 
-  Reads the string, re-canonicalizes, and checks byte equality.
-  Returns false (not throws) if the string contains non-CEDN-P
-  types.
+  Reads the string using cedn/readers for precision-preserving
+  tagged literal handling, re-canonicalizes, and checks string
+  equality.  Returns false (not throws) if the string contains
+  non-CEDN-P types.
 
   Options:
     :profile — :cedn-p (default) or :cedn-r"
   ([edn-str]
    (canonical? edn-str {}))
   ([edn-str {:keys [profile] :or {profile :cedn-p}}]
-   ;; 1. read-string
+   ;; 1. (edn/read-string {:readers readers} edn-str)
    ;; 2. canonical-str
    ;; 3. (= edn-str result)
    ))
 
 
 ;; =============================================================
-;; 4. Re-exported from cedn.order for advanced use
+;; 5. Re-exported from cedn.order for advanced use
 ;; =============================================================
 
 (def rank
@@ -537,9 +564,10 @@
 ;;   ;    :cedn/value 22/7
 ;;   ;    :cedn/path [:threshold]}
 ;;
-;; That's it.  Five functions cover 95% of use cases:
+;; That's it.  Six functions + one data var cover 95% of use cases:
 ;;   canonical-bytes  — the core (sign/verify)
 ;;   canonical-str    — debugging
 ;;   valid?           — fast gate
 ;;   explain          — error diagnostics
 ;;   inspect          — full REPL diagnostics
+;;   readers          — precision-preserving EDN round-trips
