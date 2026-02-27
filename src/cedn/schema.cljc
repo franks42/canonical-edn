@@ -1,82 +1,126 @@
 (ns cedn.schema
-  "Malli schemas for CEDN-P type contracts.
-  Adapted from docs/cedn-p-schema.cljc."
-  (:require [malli.core :as m]
-            [malli.registry :as mr]))
+  "Hand-written predicates for CEDN-P type contracts.
+  Simple recursive walk over the closed CEDN-P type set.")
 
-;; --- Leaf types ---
+;; --- Leaf predicates ---
 
-(def cedn-p-integer
-  [:and :int
-   [:>= -9223372036854775808]
-   [:<= 9223372036854775807]])
+(defn- finite-double?
+  [x]
+  (and (double? x)
+       #?(:clj  (Double/isFinite x)
+          :cljs (js/isFinite x))))
 
-(def cedn-p-double
-  [:and :double [:fn {:error/message "must be finite (no NaN/Infinity)"}
-                 #?(:clj  #(Double/isFinite %)
-                    :cljs #(js/isFinite %))]])
+(defn- inst-value?
+  [x]
+  #?(:clj  (or (instance? java.util.Date x)
+               (instance? java.time.Instant x))
+     :cljs (instance? js/Date x)))
 
-(def cedn-p-inst
-  #?(:clj  [:fn {:error/message "must be #inst (java.util.Date or java.time.Instant)"}
-            #(or (instance? java.util.Date %)
-                 (instance? java.time.Instant %))]
-     :cljs [:fn {:error/message "must be #inst (js/Date)"}
-            #(instance? js/Date %)]))
+(defn- uuid-value?
+  [x]
+  #?(:clj  (instance? java.util.UUID x)
+     :cljs (instance? cljs.core/UUID x)))
 
-(def cedn-p-uuid
-  #?(:clj  [:fn {:error/message "must be #uuid (java.util.UUID)"}
-            #(instance? java.util.UUID %)]
-     :cljs [:fn {:error/message "must be #uuid (cljs.core/UUID)"}
-            #(instance? cljs.core/UUID %)]))
+;; --- Core recursive predicate ---
 
-;; --- Recursive schema via registry ---
+(defn- cedn-p-valid?
+  "Returns true if v is a valid CEDN-P value."
+  [v]
+  (cond
+    (nil? v)     true
+    (boolean? v) true
+    (string? v)  true
+    (keyword? v) true
+    (symbol? v)  true
+    (int? v)     true
+    (double? v)  (finite-double? v)
+    (inst-value? v) true
+    (uuid-value? v) true
+    (seq? v)     (every? cedn-p-valid? v)
+    (vector? v)  (every? cedn-p-valid? v)
+    (set? v)     (every? cedn-p-valid? v)
+    (map? v)     (every? (fn [[k val]] (and (cedn-p-valid? k) (cedn-p-valid? val)))
+                         v)
+    :else        false))
 
-(def cedn-p-registry
-  {::value   [:or
-              :nil
-              :boolean
-              [:ref ::integer]
-              [:ref ::double]
-              :string
-              :keyword
-              :symbol
-              [:ref ::list]
-              [:ref ::vector]
-              [:ref ::set]
-              [:ref ::map]
-              [:ref ::inst]
-              [:ref ::uuid]]
-   ::integer cedn-p-integer
-   ::double  cedn-p-double
-   ::inst    cedn-p-inst
-   ::uuid    cedn-p-uuid
-   ::list    [:and [:fn seq?] [:sequential [:ref ::value]]]
-   ::vector  [:vector [:ref ::value]]
-   ::set     [:set [:ref ::value]]
-   ::map     [:map-of [:ref ::value] [:ref ::value]]})
+;; --- Explain (depth-first, returns first error) ---
 
-(def cedn-p-value
-  (m/schema [:ref ::value]
-            {:registry (mr/composite-registry
-                        (m/default-schemas)
-                        cedn-p-registry)}))
+(declare cedn-p-explain)
+
+(defn- explain-sequential
+  "Walk a sequential (list/vector) checking each element. path-fn builds the path entry."
+  [coll path]
+  (reduce
+   (fn [_ [i elem]]
+     (when-let [err (cedn-p-explain elem (conj path i))]
+       (reduced err)))
+   nil
+   (map-indexed vector coll)))
+
+(defn- explain-set
+  [s path]
+  (reduce
+   (fn [_ elem]
+     (when-let [err (cedn-p-explain elem (conj path elem))]
+       (reduced err)))
+   nil
+   s))
+
+(defn- explain-map
+  [m path]
+  (reduce
+   (fn [_ [k val]]
+     (or (when-let [err (cedn-p-explain k (conj path k))]
+           (reduced err))
+         (when-let [err (cedn-p-explain val (conj path k))]
+           (reduced err))))
+   nil
+   m))
+
+(defn- cedn-p-explain
+  "Returns nil if v is valid, or an error map for the first invalid sub-value."
+  [v path]
+  (cond
+    (nil? v)        nil
+    (boolean? v)    nil
+    (string? v)     nil
+    (keyword? v)    nil
+    (symbol? v)     nil
+    (int? v)        nil
+    (double? v)     (when-not (finite-double? v)
+                      {:cedn/error :cedn/invalid-number
+                       :cedn/value v
+                       :cedn/path  path})
+    (inst-value? v) nil
+    (uuid-value? v) nil
+    (seq? v)        (explain-sequential v path)
+    (vector? v)     (explain-sequential v path)
+    (set? v)        (explain-set v path)
+    (map? v)        (explain-map v path)
+    :else           {:cedn/error :cedn/unsupported-type
+                     :cedn/value v
+                     :cedn/path  path}))
 
 ;; --- Public API ---
 
 (defn schema-for
-  "Returns the Malli schema for the given profile keyword."
+  "Returns the profile keyword for the given profile.
+  Validates that the profile is known."
   [profile]
   (case profile
-    :cedn-p cedn-p-value
+    :cedn-p :cedn-p
     (throw (ex-info (str "Unknown CEDN profile: " profile)
                     {:profile profile}))))
 
 (defn valid?
   "Schema-level type check. Fast, no canonicalization."
   [profile value]
-  (m/validate (schema-for profile) value))
+  (schema-for profile)
+  (cedn-p-valid? value))
 
 (defn explain
-  "Schema-level explanation. Returns nil or error map."
+  "Schema-level explanation. Returns nil on success or an error map
+  with :cedn/error, :cedn/value, and :cedn/path on first invalid sub-value."
   [profile value]
-  (m/explain (schema-for profile) value))
+  (schema-for profile)
+  (cedn-p-explain value []))

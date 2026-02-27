@@ -23,7 +23,7 @@ All 8 implementation steps are done and tested:
 | `cedn.number` | Done | `format-double` using JCS `NumberToJSON` on JVM, all Appendix B test vectors passing |
 | `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering |
 | `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection |
-| `cedn.schema` | Done | Malli schemas for CEDN-P with recursive registry, `schema-for`/`valid?`/`explain` |
+| `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
@@ -41,7 +41,7 @@ design decisions, project state, and workflow notes across sessions.
 |------|-----------|
 | `docs/cedn-spec.md` | The formal specification.  §3 (CEDN-P types) and §5 (ordering) are the critical sections. |
 | `docs/cedn-api-design.cljc` | The public API surface and module structure.  Function signatures and module dependency graph. |
-| `docs/cedn-p-schema.cljc` | Malli and clojure.spec type contracts for CEDN-P. |
+| `docs/cedn-p-schema.cljc` | Original Malli schema design (historical reference). |
 | `docs/kex-sources.md` | Links to reference implementations, specs, and libraries. |
 
 ## Design Decisions (Open Issues Resolved)
@@ -101,7 +101,7 @@ cedn/
 │       ├── order.cljc          ← rank comparator
 │       ├── number.cljc         ← ECMAScript double formatting
 │       ├── error.cljc          ← structured error constructors
-│       ├── schema.cljc         ← Malli type contracts
+│       ├── schema.cljc         ← hand-written type predicates
 │       └── gen.cljc            ← test.check generators
 └── test/
     └── cedn/
@@ -120,7 +120,6 @@ cedn/
 ;; deps.edn
 {:paths ["src"]
  :deps {org.clojure/clojure              {:mvn/version "1.12.0"}
-        metosin/malli                     {:mvn/version "0.17.0"}
         io.github.erdtman/java-json-canonicalization {:mvn/version "1.1"}}
  :aliases
  {:test {:extra-paths ["test"]

@@ -1,12 +1,12 @@
 (ns cedn.gen
   "Property-based testing generators for CEDN values.
 
-  Built on malli.generator — generates arbitrary values that
-  conform to the CEDN-P type contract."
+  Built on clojure.test.check.generators — generates arbitrary
+  values that conform to the CEDN-P type contract."
   (:require [clojure.test.check.generators :as gen])
   #?(:clj (:import [java.util Date UUID])))
 
-;; Custom generators for types that malli can't generate natively
+;; Custom generators for types that test.check can't generate natively
 
 (def gen-finite-double
   "Generator for finite, non-NaN doubles."

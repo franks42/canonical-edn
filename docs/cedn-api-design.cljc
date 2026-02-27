@@ -28,14 +28,14 @@
 ;; cedn.emit          Per-type emit functions (internal).
 ;; cedn.order         Rank comparator for sets/maps (internal,
 ;;                    but exposed for advanced use).
-;; cedn.schema        Malli schemas for CEDN-P and CEDN-R type
+;; cedn.schema        Hand-written predicates for CEDN-P type
 ;;                    contracts.
 ;; cedn.number        ECMAScript number formatting (internal).
 ;;                    Platform-specific: delegates to JCS Java
 ;;                    lib on JVM, native toString on JS.
 ;; cedn.error         Error constructors (internal).
 ;; cedn.gen           Generators for property-based testing.
-;;                    Depends on malli.generator.
+;;                    Built on clojure.test.check.generators.
 ;;
 ;; Dependency graph (arrows = "depends on"):
 ;;
@@ -391,29 +391,30 @@
 
 
 ;; =============================================================
-;; cedn.schema — Malli schemas
+;; cedn.schema — Hand-written predicates
 ;; =============================================================
 
 (comment
 
 (ns cedn.schema
-  "Malli schemas for CEDN-P and CEDN-R type contracts.
-  See cedn-p-schema.cljc for the full implementation."
-  (:require [malli.core :as m]))
+  "Hand-written predicates for CEDN-P type contracts.
+  Recursive walk over the closed CEDN-P type set.")
 
-;; cedn-p-value — the portable schema (see cedn-p-schema.cljc)
-;; cedn-r-value — extends cedn-p-value with BigInt, BigDecimal, ratio
+;; cedn-p-valid? — recursive predicate over the CEDN-P type set
 
 (defn valid?
   "Schema-level type check.  Fast, no canonicalization."
   [profile value]
-  ;; (m/validate (schema-for profile) value)
+  ;; (schema-for profile) ;; validates profile
+  ;; (cedn-p-valid? value)
   )
 
 (defn explain
-  "Schema-level explanation.  Returns nil or error map."
+  "Schema-level explanation.  Returns nil or error map with
+  :cedn/error, :cedn/value, :cedn/path."
   [profile value]
-  ;; (m/explain (schema-for profile) value)
+  ;; (schema-for profile)
+  ;; (cedn-p-explain value [])
   )
 
 ) ;; end comment
@@ -502,10 +503,9 @@
 (ns cedn.gen
   "Property-based testing generators for CEDN values.
 
-  Built on malli.generator — generates arbitrary values that
-  conform to the CEDN-P or CEDN-R type contract."
-  (:require [cedn.schema :as schema]
-            [malli.generator :as mg]))
+  Built on clojure.test.check.generators — generates arbitrary
+  values that conform to the CEDN-P type contract."
+  (:require [clojure.test.check.generators :as gen]))
 
 (defn gen-cedn-p
   "Returns a test.check generator that produces arbitrary CEDN-P
