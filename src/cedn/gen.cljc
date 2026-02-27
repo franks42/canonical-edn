@@ -60,8 +60,9 @@
   (gen/one-of
    [(gen/return nil)
     gen/boolean
-    (gen/large-integer* {:min -9223372036854775808
-                         :max  9223372036854775807})
+    ;; JVM: full Long range; JS: limited to Number.MAX_SAFE_INTEGER
+    (gen/large-integer* {:min #?(:clj -9223372036854775808 :cljs -9007199254740991)
+                         :max #?(:clj  9223372036854775807 :cljs  9007199254740991)})
     gen-finite-double
     gen/string-alphanumeric
     (gen/fmap keyword gen-edn-name)

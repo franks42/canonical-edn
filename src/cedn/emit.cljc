@@ -14,12 +14,12 @@
                     [java.util Date UUID])
      :cljs (:import [goog.string StringBuffer])))
 
-;; --- CLJS: negative-zero detection ---
-;; In JS, (int? -0.0) is true, but -0.0 must go through the double path
-;; to emit "0.0" (not "0").  Detect via 1/x = -Infinity.
-#?(:cljs
-   (defn- neg-zero? [x]
-     (and (zero? x) (neg? (/ 1 x)))))
+;; --- CLJS negative-zero note ---
+;; In JS, -0.0 === 0 and (= -0.0 0) is true: they are the same value.
+;; We do NOT special-case negative zero on CLJS because:
+;; 1. "0.0" cannot round-trip through edn/read-string (reads as integer 0)
+;; 2. -0.0 and 0 are indistinguishable in JS for all practical purposes
+;; Both emit as "0" via the integer path.
 
 ;; --- String escaping per §3.5 ---
 
@@ -169,8 +169,7 @@
     (boolean? value)
     (.append sb (if value "true" "false"))
 
-    (and (int? value)
-         #?(:clj true :cljs (not (neg-zero? value))))
+    (int? value)
     (do
       #?(:clj
          (when-not (and (>= (long value) -9223372036854775808)
@@ -180,8 +179,7 @@
 
     #?(:clj  (instance? Double value)
        :cljs (and (number? value)
-                  (or (not (int? value))
-                      (neg-zero? value))))
+                  (not (int? value))))
     (.append sb (number/format-double value))
 
     (string? value)

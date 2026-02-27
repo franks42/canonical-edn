@@ -22,12 +22,14 @@
 
 (deftest emit-double-test
   (is (= "3.14" (emit/emit-str :cedn-p 3.14)))
-  (is (= "0.0" (emit/emit-str :cedn-p -0.0)))
-  ;; In JS, 1.0 and 0.0 are indistinguishable from integer 1 and 0
+  ;; In JS, -0.0 === 0 (same value), 1.0 and 0.0 are integers
   #?(:clj
      (do
+       (is (= "0.0" (emit/emit-str :cedn-p -0.0)))
        (is (= "1.0" (emit/emit-str :cedn-p 1.0)))
-       (is (= "0.0" (emit/emit-str :cedn-p 0.0))))))
+       (is (= "0.0" (emit/emit-str :cedn-p 0.0))))
+     :cljs
+     (is (= "0" (emit/emit-str :cedn-p -0.0)))))
 
 (deftest emit-string-basic-test
   (are [input expected]

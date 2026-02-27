@@ -17,15 +17,22 @@
       (ex-data e))))
 
 (deftest unsupported-type-test
-  (testing "throws with correct error keyword"
-    (is (= :cedn/unsupported-type (error-keyword err/unsupported-type! 22/7))))
-  (testing "includes value and type"
-    (let [data (error-data err/unsupported-type! 22/7)]
-      (is (= 22/7 (:cedn/value data)))
-      (is (some? (:cedn/type data)))))
-  (testing "accepts optional path"
-    (let [data (error-data err/unsupported-type! 22/7 [:a :b])]
-      (is (= [:a :b] (:cedn/path data))))))
+  ;; 22/7 is a Ratio on JVM, not a valid CLJS constant
+  #?(:clj
+     (do
+       (testing "throws with correct error keyword"
+         (is (= :cedn/unsupported-type (error-keyword err/unsupported-type! 22/7))))
+       (testing "includes value and type"
+         (let [data (error-data err/unsupported-type! 22/7)]
+           (is (= 22/7 (:cedn/value data)))
+           (is (some? (:cedn/type data)))))
+       (testing "accepts optional path"
+         (let [data (error-data err/unsupported-type! 22/7 [:a :b])]
+           (is (= [:a :b] (:cedn/path data)))))))
+  ;; Test with a regex (unsupported on all platforms)
+  (testing "regex throws"
+    (is (= :cedn/unsupported-type
+           (error-keyword err/unsupported-type! #"regex")))))
 
 (deftest invalid-number-test
   (is (= :cedn/invalid-number (error-keyword err/invalid-number! ##NaN)))
