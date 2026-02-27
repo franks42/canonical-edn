@@ -9,7 +9,9 @@
             [cedn.order  :as order]
             [cedn.schema :as schema]
             [clojure.edn :as edn])
-  #?(:clj (:import [java.security MessageDigest])))
+  #?(:clj (:import [java.security MessageDigest]
+                    [java.time Instant]
+                    [java.util UUID])))
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -126,20 +128,34 @@
                                    :cljs (.-message e))})]
         :profile   profile}))))
 
+;; =============================================================
+;; 4. Canonical readers
+;; =============================================================
+
+(def readers
+  "EDN readers that produce canonical Clojure data types.
+
+  Use with clojure.edn/read-string for precision-preserving round-trips:
+    (edn/read-string {:readers cedn/readers} canonical-edn-str)"
+  #?(:clj  {'inst #(Instant/parse %)
+             'uuid #(UUID/fromString %)}
+     :cljs {'inst #(js/Date. %)
+            'uuid cljs.core/uuid}))
+
 (defn canonical?
   "Given an EDN string, returns true if it is already in canonical form."
   ([edn-str]
    (canonical? edn-str {}))
   ([edn-str {:keys [profile] :or {profile :cedn-p}}]
    (try
-     (let [value (edn/read-string edn-str)
+     (let [value (edn/read-string {:readers readers} edn-str)
            result (canonical-str value {:profile profile})]
        (= edn-str result))
      (catch #?(:clj Exception :cljs :default) _
        false))))
 
 ;; =============================================================
-;; 4. Re-exported from cedn.order
+;; 5. Re-exported from cedn.order
 ;; =============================================================
 
 (def rank

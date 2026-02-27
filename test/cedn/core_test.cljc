@@ -2,7 +2,8 @@
   (:require [clojure.test :refer [deftest is are testing]]
             [cedn.core :as cedn]
             [clojure.edn :as edn])
-  #?(:clj (:import [java.util Arrays])))
+  #?(:clj (:import [java.time Instant]
+                    [java.util Arrays Date UUID])))
 
 ;; --- canonical-str ---
 
@@ -59,7 +60,35 @@
       [1 2 3]
       #{1 2 3}
       {:a 1 :b 2}
-      {:nested [1 #{:a :b} "x"]})))
+      {:nested [1 #{:a :b} "x"]}
+      #?@(:clj [(Date. 1740571200123)
+                (UUID/fromString "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")]))))
+
+#?(:clj
+   (deftest inst-round-trip-with-readers-test
+     (testing "Nanosecond-precision Instant round-trips with cedn/readers"
+       (let [inst (Instant/parse "2025-02-26T12:00:00.123456789Z")
+             s1   (cedn/canonical-str inst)
+             v2   (edn/read-string {:readers cedn/readers} s1)
+             s2   (cedn/canonical-str v2)]
+         (is (= s1 s2))
+         (is (instance? Instant v2))))
+     (testing "Millisecond-precision Date round-trips with cedn/readers"
+       (let [d  (Date. 1740571200123)
+             s1 (cedn/canonical-str d)
+             v2 (edn/read-string {:readers cedn/readers} s1)
+             s2 (cedn/canonical-str v2)]
+         (is (= s1 s2))))))
+
+#?(:clj
+   (deftest uuid-round-trip-with-readers-test
+     (testing "Mixed-case UUID canonicalizes to lowercase and round-trips"
+       (let [uuid (UUID/fromString "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6")
+             s1   (cedn/canonical-str uuid)
+             v2   (edn/read-string {:readers cedn/readers} s1)
+             s2   (cedn/canonical-str v2)]
+         (is (= s1 s2))
+         (is (= s1 "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""))))))
 
 ;; --- valid? ---
 
@@ -105,7 +134,9 @@
   (is (cedn/canonical? "42"))
   (is (cedn/canonical? "{:a 1 :b 2}"))
   (is (not (cedn/canonical? "{:b 2 :a 1}")))
-  (is (not (cedn/canonical? "not valid edn %%"))))
+  (is (not (cedn/canonical? "not valid edn %%")))
+  (is (cedn/canonical? "#inst \"2025-02-26T12:00:00.123456789Z\""))
+  (is (cedn/canonical? "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\"")))
 
 ;; --- rank ---
 
