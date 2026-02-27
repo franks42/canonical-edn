@@ -13,22 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1 implementation complete — JVM + Babashka + nbb (Node.js), CEDN-P profile.**
+**v1 implementation complete — JVM + Babashka + nbb + shadow-cljs (4 platforms), CEDN-P profile.**
 
-All modules done and tested on three platforms.  Zero production dependencies beyond Clojure.
+All modules done and tested on four platforms.  Zero production dependencies beyond Clojure.
 
 | Module | Status | Description |
 |--------|--------|-------------|
 | `cedn.error` | Done | 7 error constructors (`unsupported-type!`, `invalid-number!`, `out-of-range!`, `duplicate-key!`, `duplicate-element!`, `invalid-unicode!`, `invalid-tag-form!`) |
 | `cedn.number` | Done | Pure Clojure `ecma-reformat` post-processes `Double/toString` into ECMAScript format. Single `:clj` branch for JVM+bb. JCS is test-only cross-validation oracle. |
 | `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). |
-| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars, `neg-zero?` guard for IEEE -0.0. |
+| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars; negative zero emits as `"0"` (JS -0.0 === 0). |
 | `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
 | `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 
-**Test results: JVM 75 / 21,334, bb 70 / 1,293, nbb 66 / 228 — 0 failures on all platforms.**
+**Test results: JVM 75 / 21,335, bb 70 / 1,294, nbb 66 / 225, shadow-cljs 70 / 229 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -88,6 +88,8 @@ design decisions, project state, and workflow notes across sessions.
 cedn/
 ├── deps.edn
 ├── bb.edn                     ← Babashka project config
+├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
+├── package.json               ← npm deps (shadow-cljs)
 ├── context.md                  ← this file
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -132,7 +134,10 @@ cedn/
                        io.github.erdtman/java-json-canonicalization {:mvn/version "1.1"}}
          :main-opts   ["-m" "cognitect.test-runner"]
          :exec-fn     cognitect.test-runner.api/test}
-  :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}}}}}
+  :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}
+                      thheller/shadow-cljs {:mvn/version "2.28.23"}}}
+  :cljs-test {:extra-paths ["test"]
+              :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}}}}
 ```
 
 The only production dependency is Clojure itself.  Double formatting
@@ -210,10 +215,13 @@ nbb -cp src:test -e '
   (quote cedn.order-test) (quote cedn.schema-test)
   (quote cedn.emit-test) (quote cedn.core-test))'
 
-# 4. Linting — must report 0 errors, 0 warnings
+# 4. Tests (shadow-cljs / full CLJS) — all must pass
+npx shadow-cljs compile test
+
+# 5. Linting — must report 0 errors, 0 warnings
 clj-kondo --lint src test
 
-# 5. Formatting — must report all files correct
+# 6. Formatting — must report all files correct
 cljfmt check src test
 
 # Auto-fix formatting issues:
@@ -263,8 +271,8 @@ Full test suite passes (66 tests, 228 assertions).
 
 Key CLJS fixes:
 - `emit-string-char`: `(int ch)` → `.charCodeAt` (JS `(int "h")` returns 0)
-- `neg-zero?` guard: JS `(int? -0.0)` is true, so -0.0 needs explicit routing
-  to the double path to emit `"0.0"` instead of `"0"`
+- Negative zero: JS `-0.0 === 0` (same value); both emit as `"0"` via integer
+  path (`"0.0"` can't round-trip through `edn/read-string` on CLJS)
 - `format-inst`: uses `js/Date` (ms precision only, last 6 of 9 digits zero)
 - nbb uses `cljs.test/run-tests` (not `clojure.test/run-tests`)
 
@@ -274,16 +282,24 @@ Platform-legitimate test differences (guarded with reader conditionals):
 - SHA-256 (nil on CLJS, no built-in crypto)
 - Nanosecond `#inst` (JS Date has ms precision only)
 
-### ClojureScript / Scittle
-All `.cljc` code exercises the `:cljs` branches correctly under nbb.
-Full CLJS (shadow-cljs) and Scittle setups should work with minimal effort.
+### shadow-cljs (full ClojureScript)
+Done. Uses `:node-test` target with shadow-cljs. Includes property tests
+(4 × 200 iterations) which caught the negative-zero round-trip issue.
+Full test suite passes (70 tests, 229 assertions).
+
+Additional CLJS fixes for shadow-cljs:
+- `gen/large-integer*` range limited to `Number.MAX_SAFE_INTEGER` (2^53-1)
+- `22/7` ratio guarded with `#?(:clj ...)` (not a valid CLJS constant)
+- Property tests 3 & 4 made cross-platform (vec comparison, TextDecoder)
+
+### Scittle
+Not yet tested. All `.cljc` code exercises the `:cljs` branches correctly
+under both nbb and shadow-cljs. Scittle setup should work with minimal effort.
 
 ## What's NOT Built Yet
 
 - **CEDN-R profile**: BigInt, BigDecimal, ratios.  Deprioritized indefinitely —
   KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
   for completeness, but no implementation work is planned.
-- **Full ClojureScript build**: nbb validates `:cljs` branches. Shadow-cljs
-  setup for browser/Node CLJS builds not yet done.
 - **CLI tool**: Trivial Babashka wrapper, now unblocked.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.
