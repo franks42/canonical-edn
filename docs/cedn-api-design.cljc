@@ -13,6 +13,10 @@
 ;;   3. Cross-platform (.cljc) from day one
 ;;   4. Errors are ex-info with structured data, never nil/false
 ;;   5. Profile is explicit, never ambient state
+;;   6. CEDN-P only for KEX/Biscuit policies — CEDN-R is
+;;      deprioritized (no implementation planned).  CEDN-P is
+;;      a strict superset of Biscuit's data types and covers
+;;      all authorization use cases.
 ;; ============================================================
 
 

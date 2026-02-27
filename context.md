@@ -69,6 +69,19 @@ design decisions, project state, and workflow notes across sessions.
    precision. `canonical?` uses `readers` internally so it correctly recognizes canonical
    `#inst`/`#uuid` strings.
 
+6. **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
+   All policy statements must use only CEDN-P data types.  CEDN-R
+   (BigInt, BigDecimal, ratios) is not needed for authorization use
+   cases and is deprioritized indefinitely.  Rationale:
+   - Cross-platform portability (JVM, CLJS, Babashka, Node.js) is
+     paramount for policy interchange.
+   - CEDN-P is already a strict superset of Biscuit's data types
+     (i64, string, date, bytes, boolean, set).
+   - Financial amounts use integer smallest-units (cents, satoshis),
+     which fit in 64-bit Long.
+   - No realistic authorization scenario requires >64-bit integers,
+     exact decimals, or ratios.
+
 ## Project Structure
 
 ```
@@ -213,7 +226,9 @@ cedn.gen
 
 ## What's NOT Built Yet
 
-- **CEDN-R profile**: BigInt, BigDecimal, ratios — straightforward extensions.
+- **CEDN-R profile**: BigInt, BigDecimal, ratios.  Deprioritized indefinitely —
+  KEX/Biscuit policies require only CEDN-P types.  The spec defines CEDN-R
+  for completeness, but no implementation work is planned.
 - **ClojureScript testing**: All code is `.cljc` ready, needs shadow-cljs setup.
 - **Babashka support**: JCS Java dependency unavailable in bb — needs pure-Clojure
   fallback or bb pod for `format-double`.

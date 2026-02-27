@@ -746,6 +746,12 @@ The following types MUST cause an `unsupported-type` error
 
 ## 4. CEDN-R: Rich Profile
 
+> **Note:**  For KEX/Biscuit policy interchange, only CEDN-P is
+> required.  CEDN-P is a strict superset of Biscuit's data types
+> and covers all realistic authorization use cases.  CEDN-R is
+> defined here for spec completeness but is not required for policy
+> implementations and has no planned implementation timeline.
+
 CEDN-R extends CEDN-P with JVM-specific numeric types.  It is
 intended for environments where ALL participants run on the JVM.
 
