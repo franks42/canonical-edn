@@ -13,9 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.1.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.**
+**v1.1.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.  Maven JAR + local install + Clojars deploy via tools.build.**
 
 All modules done and tested on five platforms.  Zero production dependencies beyond Clojure.
+
+### Distribution
+
+| Platform | Mechanism | Test |
+|---|---|---|
+| Clojure (JVM) | Maven JAR via `deps.edn` | `bb test:jar` |
+| Babashka | Maven JAR via `bb.edn` | `bb test:jar` |
+| nbb | Git dep via `nbb.edn` | `bb test:nbb-dep` |
+| shadow-cljs | Source (classpath) | `bb test:cljs` |
+| Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
+
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.1.0"}`
+Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
 |--------|--------|-------------|
@@ -89,6 +102,8 @@ design decisions, project state, and workflow notes across sessions.
 cedn/
 ├── deps.edn
 ├── bb.edn                     ← Babashka project config
+├── build.clj                  ← tools.build script (jar, install, deploy)
+├── README.md                  ← Installation, usage, distribution docs
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
 ├── scittle-tests.html         ← Scittle browser test page (69 tests, loads dist/cedn.cljc)
@@ -96,6 +111,8 @@ cedn/
 │   └── cedn.cljc              ← Concatenated CEDN source for Scittle/browser (auto-generated)
 ├── context.md                  ← this file
 ├── test/
+│   ├── jar_smoke_test.clj     ← JVM JAR dependency smoke test (bb test:jar)
+│   ├── nbb_smoke_test.cljs    ← nbb git dependency smoke test (bb test:nbb-dep)
 │   ├── run-scittle.mjs        ← Playwright test runner (local, 69 tests)
 │   ├── run-scittle-cdn.mjs    ← Playwright test runner (jsdelivr CDN, 28 smoke tests)
 │   └── scittle-cdn-test.html  ← CDN smoke test page
@@ -147,7 +164,10 @@ cedn/
   :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}
                       thheller/shadow-cljs {:mvn/version "2.28.23"}}}
   :cljs-test {:extra-paths ["test"]
-              :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}}}}
+              :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}}
+  :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.6"}
+                 slipset/deps-deploy {:mvn/version "0.2.2"}}
+          :ns-default build}}}
 ```
 
 The only production dependency is Clojure itself.  Double formatting
@@ -208,6 +228,8 @@ bb test:nbb          # nbb (Node.js)
 bb test:cljs         # shadow-cljs
 bb test:scittle      # Scittle (headless Chromium via Playwright)
 bb test:scittle-cdn  # Scittle loading from jsdelivr CDN
+bb test:jar          # JVM smoke test against installed Maven JAR
+bb test:nbb-dep      # nbb smoke test via git/local dep (nbb.edn pattern)
 
 # Lint & format
 bb lint         # clj-kondo
@@ -219,8 +241,10 @@ bb gen:compliance # verify all platforms agree, confirm golden file
 # Run everything (JVM + bb + nbb + cljs + scittle + lint + fmt)
 bb test:all
 
-# Build concatenated Scittle source
-bb build:scittle   # → dist/cedn.cljc
+# Build & distribute
+bb build:scittle   # → dist/cedn.cljc (Scittle browser bundle)
+bb jar             # → target/cedn.jar
+bb install         # → ~/.m2/repository/com/github/franks42/cedn/1.1.0/
 
 # Scittle (browser, automated via Playwright — auto-rebuilds dist/cedn.cljc)
 bb test:scittle
@@ -229,6 +253,15 @@ bb test:scittle
 
 # List all available tasks
 bb tasks
+```
+
+### Build & distribute (long-form)
+
+```bash
+clojure -T:build jar       # → target/cedn.jar
+clojure -T:build install   # → ~/.m2/repository/com/github/franks42/cedn/1.1.0/
+clojure -T:build deploy    # → Clojars (needs CLOJARS_USERNAME/PASSWORD)
+clojure -T:build clean     # remove target/
 ```
 
 ### Long-form commands (reference)

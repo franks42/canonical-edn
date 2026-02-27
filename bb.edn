@@ -58,6 +58,29 @@
   test:scittle-cdn {:doc  "Run Scittle tests loading CEDN from jsdelivr CDN"
                     :task (shell "node" "test/run-scittle-cdn.mjs")}
 
+  jar       {:doc  "Build JAR (clojure -T:build jar)"
+             :task (shell "clojure" "-T:build" "jar")}
+
+  install   {:doc  "Install JAR to local Maven repo (~/.m2)"
+             :task (shell "clojure" "-T:build" "install")}
+
+  test:jar  {:doc  "Install JAR, then smoke-test it from Maven (no src on classpath)"
+             :task (do (run 'install)
+                       (shell "clojure"
+                              "-Sdeps" "{:paths [\"test\"] :deps {com.github.franks42/cedn {:mvn/version \"1.1.0\"}}}"
+                              "-M" "-m" "jar-smoke-test"))}
+
+  test:nbb-dep {:doc  "Smoke-test CEDN via nbb with git dependency (nbb.edn pattern)"
+                :task (let [dir  (str (System/getProperty "java.io.tmpdir") "/cedn-nbb-dep-test")
+                            root (System/getProperty "user.dir")]
+                        (.mkdirs (java.io.File. dir))
+                        (spit (str dir "/nbb.edn")
+                              (str "{:deps {com.github.franks42/cedn"
+                                   " {:local/root \"" root "\"}}}\n"))
+                        (shell {:dir dir}
+                               "nbb" "-cp" (str root "/test")
+                               "-e" "(require 'nbb-smoke-test)"))}
+
   lint      {:doc  "Run clj-kondo linter"
              :task (shell "clj-kondo" "--lint" "src" "test")}
 
