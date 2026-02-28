@@ -103,6 +103,27 @@
   (testing "same keys: compare values"
     (is (neg? (order/rank {:a 1} {:a 2})))))
 
+(deftest rank-bytes-test
+  (testing "byte array type priority is 10 (tagged)"
+    (is (= 10 (order/type-priority #?(:clj (byte-array [1])
+                                       :cljs (js/Uint8Array. #js [1]))))))
+  (testing "bytes sorts after map"
+    (is (pos? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
+                          {}))))
+  (testing "lexicographic comparison"
+    (is (neg? (order/rank #?(:clj (byte-array [1 2]) :cljs (js/Uint8Array. #js [1 2]))
+                          #?(:clj (byte-array [1 3]) :cljs (js/Uint8Array. #js [1 3])))))
+    (is (neg? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
+                          #?(:clj (byte-array [1 2]) :cljs (js/Uint8Array. #js [1 2])))))
+    (is (pos? (order/rank #?(:clj (byte-array [2]) :cljs (js/Uint8Array. #js [2]))
+                          #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))))))
+  (testing "bytes < inst < uuid within tagged"
+    (is (neg? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
+                          #?(:clj (java.util.Date.) :cljs (js/Date.)))))
+    (is (neg? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
+                          #?(:clj (java.util.UUID/randomUUID)
+                             :cljs (random-uuid)))))))
+
 (deftest cross-type-ordering-test
   (testing "Appendix C.3: mixed-type set ordering"
     (is (= [nil true 3.14 42 "str" :kw '(2) [1] #{} {}]

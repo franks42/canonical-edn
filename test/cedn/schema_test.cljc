@@ -46,6 +46,13 @@
        (is (schema/valid? :cedn-p (Instant/now)))
        (is (schema/valid? :cedn-p (UUID/randomUUID))))))
 
+(deftest valid-bytes-test
+  (testing "byte arrays are valid"
+    (is (schema/valid? :cedn-p #?(:clj (byte-array [1 2 3])
+                                   :cljs (js/Uint8Array. #js [1 2 3]))))
+    (is (schema/valid? :cedn-p #?(:clj (byte-array 0)
+                                   :cljs (js/Uint8Array. 0))))))
+
 (deftest invalid-types-test
   (testing "unsupported types"
     (are [v]

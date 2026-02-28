@@ -136,6 +136,46 @@
         (is (= expected-hex (bytes->hex (cedn/canonical-bytes value))))))))
 
 ;; =================================================================
+;; Byte array cross-platform vectors (not EDN-representable literals,
+;; so kept as a separate def + test)
+;; =================================================================
+
+(def xplatform-bytes-cases
+  "Cross-platform byte array test vectors.
+  Each entry is [label byte-array-value expected-str expected-hex]."
+  [["bytes empty"
+    #?(:clj (byte-array 0) :cljs (js/Uint8Array. 0))
+    "#bytes \"\""
+    "236279746573202222"]
+   ["bytes 010203"
+    #?(:clj (byte-array [1 2 3]) :cljs (js/Uint8Array. #js [1 2 3]))
+    "#bytes \"010203\""
+    "236279746573202230313032303322"]
+   ["bytes deadbeef"
+    #?(:clj (byte-array [(unchecked-byte 0xde) (unchecked-byte 0xad)
+                          (unchecked-byte 0xbe) (unchecked-byte 0xef)])
+       :cljs (js/Uint8Array. #js [0xde 0xad 0xbe 0xef]))
+    "#bytes \"deadbeef\""
+    "2362797465732022646561646265656622"]
+   ["bytes 00ff80"
+    #?(:clj (byte-array [(byte 0x00) (unchecked-byte 0xff) (unchecked-byte 0x80)])
+       :cljs (js/Uint8Array. #js [0x00 0xff 0x80]))
+    "#bytes \"00ff80\""
+    "236279746573202230306666383022"]])
+
+(deftest cross-platform-bytes-canonical-str-test
+  (testing "canonical-str for byte arrays matches on all platforms"
+    (doseq [[label value expected _] xplatform-bytes-cases]
+      (testing label
+        (is (= expected (cedn/canonical-str value)))))))
+
+(deftest cross-platform-bytes-canonical-bytes-test
+  (testing "canonical-bytes for byte arrays matches on all platforms"
+    (doseq [[label value _ expected-hex] xplatform-bytes-cases]
+      (testing label
+        (is (= expected-hex (bytes->hex (cedn/canonical-bytes value))))))))
+
+;; =================================================================
 ;; Composite compliance vector (inline copy for platforms that
 ;; cannot read the file, e.g. Scittle)
 ;; =================================================================

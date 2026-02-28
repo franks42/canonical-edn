@@ -190,7 +190,8 @@
 (defn type-priority
   "Returns the integer priority for a value's type.
   nil=0, boolean=1, number=2, string=3, keyword=4,
-  symbol=5, list=6, vector=7, set=8, map=9, tagged=10."
+  symbol=5, list=6, vector=7, set=8, map=9,
+  tagged(bytes/inst/uuid)=10."
   [value]
   (cond
     (nil? value)     0
@@ -335,6 +336,49 @@
                 bv (map #(get b %) bk)]
             (compare-sequential av bv)))))))
 
+(defn- compare-bytes
+  "Compare byte arrays lexicographically by unsigned byte value."
+  [a b]
+  (let [alen #?(:clj (alength ^bytes a) :cljs (.-length a))
+        blen #?(:clj (alength ^bytes b) :cljs (.-length b))
+        limit (min alen blen)]
+    (loop [i 0]
+      (if (< i limit)
+        (let [ab (bit-and #?(:clj (aget ^bytes a i) :cljs (aget a i)) 0xff)
+              bb (bit-and #?(:clj (aget ^bytes b i) :cljs (aget b i)) 0xff)
+              c  (compare ab bb)]
+          (if (zero? c)
+            (recur (inc i))
+            c))
+        (compare alen blen)))))
+
+(defn- tag-kind
+  "Returns a keyword for the tagged-literal kind, for sub-ordering.
+  :bytes < :inst < :uuid (alphabetical)."
+  [v]
+  (cond
+    #?(:clj  (bytes? v)
+       :cljs (instance? js/Uint8Array v))               :bytes
+    #?(:clj  (or (instance? java.util.Date v)
+                 (instance? java.time.Instant v))
+       :cljs (instance? js/Date v))                      :inst
+    (uuid? v)                                             :uuid
+    :else                                                 :unknown))
+
+(defn- compare-tagged
+  "Compare two tagged values (bytes/inst/uuid).
+  First by tag-kind (alphabetical), then by value within same kind."
+  [a b]
+  (let [ka (tag-kind a)
+        kb (tag-kind b)]
+    (if (not= ka kb)
+      (compare ka kb)
+      (case ka
+        :bytes (compare-bytes a b)
+        :inst  (compare (str a) (str b))
+        :uuid  (compare (str a) (str b))
+        0))))
+
 (defn rank
   "Comparator implementing the total order from Section 5.
 
@@ -346,7 +390,7 @@
      - seqs/vectors: element-by-element, shorter first
      - sets: cardinality, then pairwise elements
      - maps: count, then keys, then values
-     - tagged: tag symbol, then value"
+     - tagged: tag kind (bytes < inst < uuid), then value"
   [a b]
   (if (identical? a b)
     0
@@ -365,8 +409,8 @@
           7 (compare-sequential a b)  ;; vectors
           8 (compare-sets a b)
           9 (compare-maps a b)
-          ;; default: tagged or unknown
-          0)))))
+          ;; default: tagged (bytes/inst/uuid)
+          (compare-tagged a b))))))
 
 
 (ns cedn.schema
@@ -391,6 +435,11 @@
   [x]
   (uuid? x))
 
+(defn- bytes-value?
+  [x]
+  #?(:clj  (bytes? x)
+     :cljs (instance? js/Uint8Array x)))
+
 ;; --- Core recursive predicate ---
 
 (defn- cedn-p-valid?
@@ -406,6 +455,7 @@
     (double? v)  (finite-double? v)
     (inst-value? v) true
     (uuid-value? v) true
+    (bytes-value? v) true
     (seq? v)     (every? cedn-p-valid? v)
     (vector? v)  (every? cedn-p-valid? v)
     (set? v)     (every? cedn-p-valid? v)
@@ -463,6 +513,7 @@
                        :cedn/path  path})
     (inst-value? v) nil
     (uuid-value? v) nil
+    (bytes-value? v) nil
     (seq? v)        (explain-sequential v path)
     (vector? v)     (explain-sequential v path)
     (set? v)        (explain-set v path)
@@ -602,6 +653,19 @@
      [v]
      (.toLowerCase (str v))))
 
+;; --- #bytes formatting ---
+
+(defn- format-bytes
+  "Format a byte array as lowercase hex string."
+  [value]
+  (let [hex-char (fn [b]
+                   #?(:clj  (format "%02x" (bit-and (int b) 0xff))
+                      :cljs (-> (.toString (bit-and b 0xff) 16)
+                                (.padStart 2 "0"))))]
+    #?(:clj  (apply str (map hex-char (seq value)))
+       :cljs (apply str (map (fn [i] (hex-char (aget value i)))
+                             (range (.-length value)))))))
+
 ;; --- Core emit ---
 
 (declare emit)
@@ -731,6 +795,13 @@
       (.append sb (format-uuid value))
       (.append sb \"))
 
+    #?(:clj  (bytes? value)
+       :cljs (instance? js/Uint8Array value))
+    (do
+      (.append sb "#bytes \"")
+      (.append sb (format-bytes value))
+      (.append sb \"))
+
     :else
     (err/unsupported-type! value)))
 
@@ -756,6 +827,8 @@
   #?(:clj (:import [java.security MessageDigest]
                    [java.time Instant]
                    [java.util UUID])))
+
+(def version "1.2.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -874,16 +947,33 @@
 ;; 4. Canonical readers
 ;; =============================================================
 
+(defn- hex->bytes
+  "Parse a hex string into a byte array."
+  [s]
+  #?(:clj  (let [n (/ (count s) 2)
+                 bs (byte-array n)]
+             (dotimes [i n]
+               (aset bs i (unchecked-byte
+                           (Integer/parseInt (subs s (* i 2) (+ (* i 2) 2)) 16))))
+             bs)
+     :cljs (let [n (/ (count s) 2)
+                 arr (js/Uint8Array. n)]
+             (dotimes [i n]
+               (aset arr i (js/parseInt (.substring s (* i 2) (+ (* i 2) 2)) 16)))
+             arr)))
+
 (def readers
   "EDN readers that produce canonical Clojure data types.
 
   Use with clojure.edn/read-string for precision-preserving round-trips:
     (edn/read-string {:readers cedn/readers} canonical-edn-str)"
-  #?(:clj  {'inst #(Instant/parse %)
-            'uuid #(UUID/fromString %)}
+  #?(:clj  {'inst  #(Instant/parse %)
+            'uuid  #(UUID/fromString %)
+            'bytes hex->bytes}
      ;; CLJS: built-in #uuid reader already produces cljs.core/UUID.
      ;; Only override #inst to ensure js/Date construction.
-     :cljs {'inst #(js/Date. %)}))
+     :cljs {'inst  #(js/Date. %)
+            'bytes hex->bytes}))
 
 (defn canonical?
   "Given an EDN string, returns true if it is already in canonical form."

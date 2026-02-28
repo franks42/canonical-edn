@@ -112,6 +112,29 @@
          (is (= s1 s2))
          (is (= s1 "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""))))))
 
+;; --- version ---
+
+(deftest version-test
+  (is (= "1.2.0" cedn/version)))
+
+;; --- #bytes round-trip ---
+
+(deftest bytes-round-trip-test
+  (testing "byte array round-trips through canonical-str + readers"
+    (let [bs #?(:clj (byte-array [(unchecked-byte 0xde) (unchecked-byte 0xad)
+                                   (unchecked-byte 0xbe) (unchecked-byte 0xef)])
+                :cljs (js/Uint8Array. #js [0xde 0xad 0xbe 0xef]))
+          s1 (cedn/canonical-str bs)
+          _  (is (= "#bytes \"deadbeef\"" s1))
+          v2 (edn/read-string {:readers cedn/readers} s1)
+          s2 (cedn/canonical-str v2)]
+      (is (= s1 s2))
+      #?(:clj  (is (java.util.Arrays/equals ^bytes bs ^bytes v2))
+         :cljs (is (= (vec bs) (vec v2)))))))
+
+(deftest bytes-canonical-test
+  (is (cedn/canonical? "#bytes \"deadbeef\"")))
+
 ;; --- valid? ---
 
 (deftest valid-test

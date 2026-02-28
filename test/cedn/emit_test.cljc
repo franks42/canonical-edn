@@ -147,6 +147,39 @@
          (is (= "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
                 (emit/emit-str :cedn-p u)))))))
 
+;; --- #bytes ---
+
+(deftest emit-bytes-empty-test
+  (testing "empty byte array"
+    (is (= "#bytes \"\""
+           (emit/emit-str :cedn-p #?(:clj (byte-array 0)
+                                      :cljs (js/Uint8Array. 0)))))))
+
+(deftest emit-bytes-single-test
+  (testing "single byte"
+    (is (= "#bytes \"2a\""
+           (emit/emit-str :cedn-p #?(:clj (byte-array [0x2a])
+                                      :cljs (js/Uint8Array. #js [0x2a])))))))
+
+(deftest emit-bytes-multi-test
+  (testing "multi-byte"
+    (is (= "#bytes \"010203\""
+           (emit/emit-str :cedn-p #?(:clj (byte-array [1 2 3])
+                                      :cljs (js/Uint8Array. #js [1 2 3])))))))
+
+(deftest emit-bytes-high-test
+  (testing "high bytes (0xff)"
+    (is (= "#bytes \"00ff80\""
+           (emit/emit-str :cedn-p #?(:clj (byte-array [(byte 0x00) (unchecked-byte 0xff) (unchecked-byte 0x80)])
+                                      :cljs (js/Uint8Array. #js [0x00 0xff 0x80])))))))
+
+(deftest emit-bytes-hash-test
+  (testing "typical SHA-256 hash prefix"
+    (is (= "#bytes \"deadbeef\""
+           (emit/emit-str :cedn-p #?(:clj (byte-array [(unchecked-byte 0xde) (unchecked-byte 0xad)
+                                                        (unchecked-byte 0xbe) (unchecked-byte 0xef)])
+                                      :cljs (js/Uint8Array. #js [0xde 0xad 0xbe 0xef])))))))
+
 ;; --- Error cases ---
 
 (deftest emit-unsupported-type-test

@@ -20,6 +20,11 @@
   [x]
   (uuid? x))
 
+(defn- bytes-value?
+  [x]
+  #?(:clj  (bytes? x)
+     :cljs (instance? js/Uint8Array x)))
+
 ;; --- Core recursive predicate ---
 
 (defn- cedn-p-valid?
@@ -35,6 +40,7 @@
     (double? v)  (finite-double? v)
     (inst-value? v) true
     (uuid-value? v) true
+    (bytes-value? v) true
     (seq? v)     (every? cedn-p-valid? v)
     (vector? v)  (every? cedn-p-valid? v)
     (set? v)     (every? cedn-p-valid? v)
@@ -92,6 +98,7 @@
                        :cedn/path  path})
     (inst-value? v) nil
     (uuid-value? v) nil
+    (bytes-value? v) nil
     (seq? v)        (explain-sequential v path)
     (vector? v)     (explain-sequential v path)
     (set? v)        (explain-set v path)

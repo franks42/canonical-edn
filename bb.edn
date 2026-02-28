@@ -67,7 +67,7 @@
   test:jar  {:doc  "Install JAR, then smoke-test it from Maven (no src on classpath)"
              :task (do (run 'install)
                        (shell "clojure"
-                              "-Sdeps" "{:paths [\"test\"] :deps {com.github.franks42/cedn {:mvn/version \"1.1.0\"}}}"
+                              "-Sdeps" "{:paths [\"test\"] :deps {com.github.franks42/cedn {:mvn/version \"1.2.0\"}}}"
                               "-M" "-m" "jar-smoke-test"))}
 
   test:nbb-dep {:doc  "Smoke-test CEDN via nbb with git dependency (nbb.edn pattern)"

@@ -104,6 +104,19 @@
      [v]
      (.toLowerCase (str v))))
 
+;; --- #bytes formatting ---
+
+(defn- format-bytes
+  "Format a byte array as lowercase hex string."
+  [value]
+  (let [hex-char (fn [b]
+                   #?(:clj  (format "%02x" (bit-and (int b) 0xff))
+                      :cljs (-> (.toString (bit-and b 0xff) 16)
+                                (.padStart 2 "0"))))]
+    #?(:clj  (apply str (map hex-char (seq value)))
+       :cljs (apply str (map (fn [i] (hex-char (aget value i)))
+                             (range (.-length value)))))))
+
 ;; --- Core emit ---
 
 (declare emit)
@@ -231,6 +244,13 @@
     (do
       (.append sb "#uuid \"")
       (.append sb (format-uuid value))
+      (.append sb \"))
+
+    #?(:clj  (bytes? value)
+       :cljs (instance? js/Uint8Array value))
+    (do
+      (.append sb "#bytes \"")
+      (.append sb (format-bytes value))
       (.append sb \"))
 
     :else

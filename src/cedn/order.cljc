@@ -7,7 +7,8 @@
 (defn type-priority
   "Returns the integer priority for a value's type.
   nil=0, boolean=1, number=2, string=3, keyword=4,
-  symbol=5, list=6, vector=7, set=8, map=9, tagged=10."
+  symbol=5, list=6, vector=7, set=8, map=9,
+  tagged(bytes/inst/uuid)=10."
   [value]
   (cond
     (nil? value)     0
@@ -152,6 +153,49 @@
                 bv (map #(get b %) bk)]
             (compare-sequential av bv)))))))
 
+(defn- compare-bytes
+  "Compare byte arrays lexicographically by unsigned byte value."
+  [a b]
+  (let [alen #?(:clj (alength ^bytes a) :cljs (.-length a))
+        blen #?(:clj (alength ^bytes b) :cljs (.-length b))
+        limit (min alen blen)]
+    (loop [i 0]
+      (if (< i limit)
+        (let [ab (bit-and #?(:clj (aget ^bytes a i) :cljs (aget a i)) 0xff)
+              bb (bit-and #?(:clj (aget ^bytes b i) :cljs (aget b i)) 0xff)
+              c  (compare ab bb)]
+          (if (zero? c)
+            (recur (inc i))
+            c))
+        (compare alen blen)))))
+
+(defn- tag-kind
+  "Returns a keyword for the tagged-literal kind, for sub-ordering.
+  :bytes < :inst < :uuid (alphabetical)."
+  [v]
+  (cond
+    #?(:clj  (bytes? v)
+       :cljs (instance? js/Uint8Array v))               :bytes
+    #?(:clj  (or (instance? java.util.Date v)
+                 (instance? java.time.Instant v))
+       :cljs (instance? js/Date v))                      :inst
+    (uuid? v)                                             :uuid
+    :else                                                 :unknown))
+
+(defn- compare-tagged
+  "Compare two tagged values (bytes/inst/uuid).
+  First by tag-kind (alphabetical), then by value within same kind."
+  [a b]
+  (let [ka (tag-kind a)
+        kb (tag-kind b)]
+    (if (not= ka kb)
+      (compare ka kb)
+      (case ka
+        :bytes (compare-bytes a b)
+        :inst  (compare (str a) (str b))
+        :uuid  (compare (str a) (str b))
+        0))))
+
 (defn rank
   "Comparator implementing the total order from Section 5.
 
@@ -163,7 +207,7 @@
      - seqs/vectors: element-by-element, shorter first
      - sets: cardinality, then pairwise elements
      - maps: count, then keys, then values
-     - tagged: tag symbol, then value"
+     - tagged: tag kind (bytes < inst < uuid), then value"
   [a b]
   (if (identical? a b)
     0
@@ -182,5 +226,5 @@
           7 (compare-sequential a b)  ;; vectors
           8 (compare-sets a b)
           9 (compare-maps a b)
-          ;; default: tagged or unknown
-          0)))))
+          ;; default: tagged (bytes/inst/uuid)
+          (compare-tagged a b))))))
