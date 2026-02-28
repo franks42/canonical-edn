@@ -13,9 +13,16 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.1.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.  Maven JAR + local install + Clojars deploy via tools.build.**
+**v1.2.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.  Maven JAR + local install + Clojars deploy via tools.build.**
 
 All modules done and tested on five platforms.  Zero production dependencies beyond Clojure.
+
+### v1.2.0 Changes
+
+- **`#bytes "hex"` tagged literal**: Native byte array support (`byte[]` on JVM, `js/Uint8Array` on CLJS). Emits as `#bytes "deadbeef"` (lowercase hex). Reader `hex->bytes` in `cedn/readers` for round-tripping.
+- **`cedn.core/version`**: Version string var (`"1.2.0"`).
+- **Type ordering extended**: `nil < bool < num < str < kw < sym < list < vec < set < map < #bytes < #inst < #uuid`. Tagged types sub-ordered by tag-kind (alphabetical: `:bytes` < `:inst` < `:uuid`), then by value within same kind.
+- **Schema validation**: Byte arrays accepted as valid CEDN-P values.
 
 ### Distribution
 
@@ -27,22 +34,22 @@ All modules done and tested on five platforms.  Zero production dependencies bey
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.1.0"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.2.0"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
 |--------|--------|-------------|
 | `cedn.error` | Done | 7 error constructors (`unsupported-type!`, `invalid-number!`, `out-of-range!`, `duplicate-key!`, `duplicate-element!`, `invalid-unicode!`, `invalid-tag-form!`) |
 | `cedn.number` | Done | Pure Clojure `ecma-reformat` post-processes `Double/toString` into ECMAScript format. Single `:clj` branch for JVM+bb. JCS is test-only cross-validation oracle. |
-| `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). |
-| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex via `uuid?`), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars; negative zero emits as `"0"` (JS -0.0 === 0). |
-| `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts, `schema-for`/`valid?`/`explain` |
-| `cedn.core` | Done | Public API: `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` |
+| `cedn.order` | Done | `type-priority` + `rank` comparator implementing §5 total ordering. `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional). `compare-bytes` (lexicographic unsigned), `compare-tagged` (tag-kind dispatch: bytes < inst < uuid). |
+| `cedn.emit` | Done | Core `emit`/`emit-str` with type dispatch, string escaping (§3.5), `#inst` (9 fractional digits), `#uuid` (lowercase hex via `uuid?`), `#bytes` (lowercase hex via `format-bytes`), set/map sorting + duplicate detection. CLJS: `.charCodeAt` for string chars; negative zero emits as `"0"` (JS -0.0 === 0). |
+| `cedn.schema` | Done | Hand-written predicates for CEDN-P type contracts including `bytes-value?`, `schema-for`/`valid?`/`explain` |
+| `cedn.core` | Done | Public API: `version`, `canonical-bytes`, `canonical-str`, `valid?`, `explain`, `assert!`, `inspect` (SHA-256), `canonical?`, `rank`, `readers` (incl. `#bytes` via `hex->bytes`) |
 | `cedn.gen` | Done | test.check generators for CEDN-P values |
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 | Cross-platform bytes | Done | 40 values × 2 checks (canonical-str + bytes hex): proves all 5 platforms produce identical output for the same inputs. Compliance test vectors stored in `cedn-p-compliance-vectors.edn` (IETF RFC-style). |
 
-**Test results: JVM 79 / 21,499, bb 74 / 1,458, nbb 70 / 389, shadow-cljs 74 / 393, Scittle 69 / 69, Scittle-CDN 28 / 28 — 0 failures on all platforms.**
+**Test results: JVM 75 / 386, bb 86 / 1,485, nbb 82 / 416, shadow-cljs 93 / 439, Scittle 69 / 69, Scittle-CDN 28 / 28 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
 **Persistent project memory is stored in MCP memory (tag: `cedn`).**
@@ -65,8 +72,9 @@ design decisions, project state, and workflow notes across sessions.
    `java.util.Date` (ms) → 3 digits + 6 zeros.
    `java.time.Instant` (ns) → all 9 digits.
 
-2. **Custom tagged literals → `#inst` and `#uuid` only.**
-   CEDN-P v1 does NOT support arbitrary tagged literals.
+2. **Tagged literals → `#inst`, `#uuid`, and `#bytes` only.**
+   CEDN-P does NOT support arbitrary tagged literals.  `#bytes` added in v1.2.0
+   for byte array support (SHA-256 hashes, Ed25519 signatures, etc.).
 
 3. **CEDN-R characters → excluded.**
 
@@ -77,10 +85,12 @@ design decisions, project state, and workflow notes across sessions.
    only for astral-plane characters (U+10000+).
 
 5. **`readers` map for canonical round-trips.**
-   JVM: `cedn/readers` maps `#inst` → `Instant/parse` and `#uuid` → `UUID/fromString`.
+   JVM: `cedn/readers` maps `#inst` → `Instant/parse`, `#uuid` → `UUID/fromString`,
+   `#bytes` → `hex->bytes` (returns `byte[]`).
    The default EDN reader produces `java.util.Date` (ms precision), losing sub-ms digits
    from the 9-fractional-digit canonical `#inst` form. `Instant/parse` preserves nanosecond
-   precision. CLJS: only overrides `#inst` → `js/Date.`; built-in EDN reader handles `#uuid`.
+   precision. CLJS: overrides `#inst` → `js/Date.` and `#bytes` → `hex->bytes` (returns
+   `js/Uint8Array`); built-in EDN reader handles `#uuid`.
    `canonical?` uses `readers` internally on all platforms.
 
 6. **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
@@ -124,7 +134,7 @@ cedn/
 │   └── kex-sources.md          ← reference links
 ├── src/
 │   └── cedn/
-│       ├── core.cljc           ← public API (7 functions + rank + readers)
+│       ├── core.cljc           ← public API (version + 7 functions + rank + readers)
 │       ├── emit.cljc           ← per-type canonical emission
 │       ├── order.cljc          ← rank comparator
 │       ├── number.cljc         ← ECMAScript double formatting
@@ -183,6 +193,8 @@ ECMAScript implementation for 20,000+ doubles.
 ```clojure
 (require '[cedn.core :as cedn])
 
+cedn/version  ;=> "1.2.0"
+
 ;; Canonicalize to bytes (for signing/hashing)
 (cedn/canonical-bytes {:a 1 :b 2})
 ;=> #bytes[7B 3A 61 20 31 20 3A 62 20 32 7D]
@@ -190,6 +202,10 @@ ECMAScript implementation for 20,000+ doubles.
 ;; Canonicalize to string (for debugging)
 (cedn/canonical-str {:b 2 :a 1})
 ;=> "{:a 1 :b 2}"
+
+;; Byte arrays emit as #bytes "hex"
+(cedn/canonical-str (byte-array [0xde 0xad 0xbe 0xef]))
+;=> "#bytes \"deadbeef\""
 
 ;; Validate before canonicalization
 (cedn/valid? {:a 1 :b "hello"})  ;=> true
@@ -203,8 +219,12 @@ ECMAScript implementation for 20,000+ doubles.
 (cedn/canonical? "{:a 1 :b 2}")  ;=> true
 (cedn/canonical? "{:b 2 :a 1}")  ;=> false
 
-;; Round-trip with precision-preserving readers
+;; Round-trip with precision-preserving readers (incl. #bytes)
 (require '[clojure.edn :as edn])
+(let [s (cedn/canonical-str (byte-array [1 2 3]))]
+  (edn/read-string {:readers cedn/readers} s))
+;=> #bytes[01 02 03]
+
 (let [s (cedn/canonical-str (java.time.Instant/parse "2025-02-26T12:00:00.123456789Z"))]
   (edn/read-string {:readers cedn/readers} s))
 ;=> #object[java.time.Instant "2025-02-26T12:00:00.123456789Z"]
@@ -250,7 +270,7 @@ bb test:all
 # Build & distribute
 bb build:scittle   # → dist/cedn.cljc (Scittle browser bundle)
 bb jar             # → target/cedn.jar
-bb install         # → ~/.m2/repository/com/github/franks42/cedn/1.1.0/
+bb install         # → ~/.m2/repository/com/github/franks42/cedn/1.2.0/
 
 # Scittle (browser, automated via Playwright — auto-rebuilds dist/cedn.cljc)
 bb test:scittle
@@ -265,7 +285,7 @@ bb tasks
 
 ```bash
 clojure -T:build jar       # → target/cedn.jar
-clojure -T:build install   # → ~/.m2/repository/com/github/franks42/cedn/1.1.0/
+clojure -T:build install   # → ~/.m2/repository/com/github/franks42/cedn/1.2.0/
 clojure -T:build deploy    # → Clojars (needs CLOJARS_USERNAME/PASSWORD)
 clojure -T:build clean     # remove target/
 ```
@@ -339,7 +359,7 @@ cedn.gen
   `goog.string.StringBuffer` (CLJS) as first arg, all emit calls append to it.
 - **Closed type dispatch**: `cond` chain in `emit`, NOT protocols/multimethods.
   Order matters: nil → boolean → int → double → string → keyword → symbol →
-  seq → vector → set → map → #inst → #uuid → error.
+  seq → vector → set → map → #inst → #uuid → #bytes → error.
 - **Duplicate detection**: After sorting sets/maps, check adjacent elements/keys
   for equality. O(n) after O(n log n) sort.
 - **Cross-platform .cljc**: All files are `.cljc` with reader conditionals for
