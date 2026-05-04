@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 constant — and bump the matching constants in `src/cedn/core.cljc` and
 `build.clj` — before tagging the next release.)
 
+## [1.3.1] — 2026-05-04 — Release-workflow fix
+
+No library code changes. v1.3.0 tag's CI run failed at the Clojars deploy step because `clojure -T:build deploy` couldn't resolve `org.clojure/clojure 1.12.0` — `tools.build`'s `create-basis` runs in a separate resolver context from the surrounding tool-mode classpath, and on a fresh CI runner ~/.m2 the artifact wasn't pre-populated.
+
+### Fixed
+
+- `.github/workflows/release.yml` now runs `clojure -P` (prefetch project deps) before tests and deploy. This populates `~/.m2` with the project's main `:deps` (Clojure itself plus transitive deps) so the subsequent `clojure -T:build deploy` finds them when `tools.build/create-basis` reads `deps.edn`.
+
+### Operational note for v1.3.0
+
+The v1.3.0 git tag exists on origin but no GitHub Release was created and no Clojars artifact was published. Effectively a dud — harmless but cosmetic. v1.3.1 supersedes it; v1.3.0 can be left in place as a historical marker or deleted from origin (`git push origin :v1.3.0`) at maintainer discretion.
+
 ## [1.3.0] — 2026-05-03 — `cedn` CLI shipped
 
 Library API unchanged from 1.2.0. This release ships the **command-line filter** for canonical EDN, plus the surrounding test/release plumbing.

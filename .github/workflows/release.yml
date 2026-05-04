@@ -71,6 +71,14 @@ jobs:
           fi
           echo "Tag and build.clj version agree: $VERSION"
 
+      - name: Prefetch project deps
+        # Populates ~/.m2 with the project's main :deps (org.clojure/clojure
+        # 1.12.0 etc.) so tools.build/create-basis can resolve them later.
+        # `clj -T:build deploy` runs in tool mode, which has its own
+        # classpath; without this prefetch, the basis resolution inside
+        # build.clj fails with "Could not find artifact org.clojure/clojure".
+        run: clojure -P
+
       - name: Run library tests (bb)
         run: bb test:bb
 

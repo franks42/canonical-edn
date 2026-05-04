@@ -115,7 +115,7 @@
 ;; --- version ---
 
 (deftest version-test
-  (is (= "1.3.0" cedn/version)))
+  (is (= "1.3.1" cedn/version)))
 
 ;; --- #bytes round-trip ---
 

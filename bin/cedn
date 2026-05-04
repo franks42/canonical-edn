@@ -32,7 +32,7 @@
 
 ;; Single source of truth for both --version output and the Maven
 ;; coord we resolve from Clojars. Bumped at release time.
-(def version "1.3.0")
+(def version "1.3.1")
 
 ;; Dev vs release source resolution.
 (let [script-file (java.io.File. (System/getProperty "babashka.file"))
