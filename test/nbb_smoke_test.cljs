@@ -4,6 +4,7 @@
    This file is NOT on the normal src/test classpath — it is invoked
    by a separate nbb process whose only dep is the git artifact."
   (:require [cljs.test :refer [deftest is testing run-tests]]
+            [cljs.reader :as reader]
             [cedn.core :as cedn]))
 
 (deftest canonical-str-test
@@ -25,10 +26,9 @@
 
 (deftest canonical-bytes-test
   (testing "bytes match UTF-8 encoding of canonical string"
-    (let [v {:z 0 :a 1}
-          s (cedn/canonical-str v)
-          bs (cedn/canonical-bytes v)
-          expected (js/Uint8Array. (js/TextEncoder. "utf-8") s)]
+    (let [v  {:z 0 :a 1}
+          s  (cedn/canonical-str v)
+          bs (cedn/canonical-bytes v)]
       (is (= (vec (.encode (js/TextEncoder.) s)) (vec bs))))))
 
 (deftest valid?-test
@@ -60,7 +60,7 @@
   (testing "#uuid round-trip"
     (let [u (random-uuid)
           s (cedn/canonical-str u)
-          v (cljs.reader/read-string s)]
+          v (reader/read-string s)]
       (is (= u v)))))
 
 (run-tests)

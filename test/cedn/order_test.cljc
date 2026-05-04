@@ -106,7 +106,7 @@
 (deftest rank-bytes-test
   (testing "byte array type priority is 10 (tagged)"
     (is (= 10 (order/type-priority #?(:clj (byte-array [1])
-                                       :cljs (js/Uint8Array. #js [1]))))))
+                                      :cljs (js/Uint8Array. #js [1]))))))
   (testing "bytes sorts after map"
     (is (pos? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
                           {}))))

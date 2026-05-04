@@ -153,7 +153,7 @@
     "236279746573202230313032303322"]
    ["bytes deadbeef"
     #?(:clj (byte-array [(unchecked-byte 0xde) (unchecked-byte 0xad)
-                          (unchecked-byte 0xbe) (unchecked-byte 0xef)])
+                         (unchecked-byte 0xbe) (unchecked-byte 0xef)])
        :cljs (js/Uint8Array. #js [0xde 0xad 0xbe 0xef]))
     "#bytes \"deadbeef\""
     "2362797465732022646561646265656622"]

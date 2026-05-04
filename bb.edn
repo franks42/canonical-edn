@@ -138,11 +138,58 @@
                          (println "\nGolden file: test/cedn/cedn-p-compliance-vectors.edn")
                          (println "All platforms produced identical output.")))}
 
+  test:cli  {:doc  "Run CLI integration tests (shells out to bin/cedn)"
+             :task (do (require 'clojure.test 'cedn.cli-test)
+                       (let [r (clojure.test/run-tests 'cedn.cli-test)]
+                         (when (pos? (+ (:fail r) (:error r)))
+                           (System/exit 1))))}
+
+  test:cli-release
+            {:doc  "Install lib to local m2, then run bin/cedn from a clean
+                    temp dir (no adjacent src/) so it goes through add-deps
+                    and resolves cedn from Maven. Catches release-mode bugs."
+             :task (do (run 'install)
+                       (let [tmp (str (System/getProperty "java.io.tmpdir")
+                                      "/cedn-cli-release-test")
+                             root (System/getProperty "user.dir")]
+                         (.mkdirs (java.io.File. tmp))
+                         (shell "cp" (str root "/bin/cedn") tmp)
+                         (let [r (shell {:dir tmp :out :string} "./cedn" "--edn" "{:b 2 :a 1}")
+                               out (:out r)]
+                           (if (= "{:a 1 :b 2}\n" out)
+                             (println "OK: release-mode CLI resolved cedn from local m2 and produced canonical output")
+                             (do (println "FAIL: release-mode CLI produced:" (pr-str out))
+                                 (System/exit 1))))))}
+
+  release-check
+            {:doc  "Refuse to release a non-stable version. Run before `git tag`."
+             :task (let [src (slurp "bin/cedn")
+                         m   (re-find (re-pattern "\\(def version\\s+\"([^\"]+)\"") src)
+                         ver (second m)]
+                     (cond
+                       (nil? ver)
+                       (do (println "ERROR: couldn't parse version from bin/cedn")
+                           (System/exit 1))
+
+                       (re-find (re-pattern "(?i)snapshot|alpha|beta|rc") ver)
+                       (do (println "ERROR: bin/cedn version is" (str "\"" ver "\"")
+                                    "— refusing to release a non-stable version.")
+                           (System/exit 1))
+
+                       (not (re-matches (re-pattern "\\d+\\.\\d+\\.\\d+") ver))
+                       (do (println "ERROR: version" (str "\"" ver "\"")
+                                    "is not a semver triple X.Y.Z")
+                           (System/exit 1))
+
+                       :else
+                       (println "OK: version is" (str "\"" ver "\""))))}
+
   test:all  {:doc  "Run all tests + lint + format check"
              :task (do (run 'test:jvm)
                        (run 'test:bb)
                        (run 'test:nbb)
                        (run 'test:cljs)
                        (run 'test:scittle)
+                       (run 'test:cli)
                        (run 'lint)
                        (run 'fmt))}}}

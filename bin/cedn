@@ -1,0 +1,180 @@
+#!/usr/bin/env bb
+
+;; cedn — canonical EDN filter
+;;
+;; Reads zero or more top-level EDN forms from stdin (or --input/--edn),
+;; emits each as canonical EDN to stdout (or --output) as raw UTF-8
+;; bytes. Streaming: parses, canonicalizes, and emits one form at a
+;; time — empty input yields empty output, single form yields one
+;; form, large multi-form streams flow through with bounded memory.
+;;
+;; Output is raw UTF-8 bytes via canonical-bytes — byte-stable across
+;; runs and platforms by construction. Default separator is newline
+;; with a trailing newline (Unix file convention); --objects switches
+;; to single-space separator with no trailing newline.
+;;
+;; Source loading: when running from inside the canonical-edn repo
+;; (i.e. ../src/cedn/core.cljc exists relative to this script), we
+;; classpath-add the local src/ so unpublished changes are picked up.
+;; In release (the artifact downloaded from a GitHub Release, with no
+;; adjacent src/), we use babashka.deps to pull the pinned cedn
+;; version from Clojars on first run; bb caches in ~/.m2 thereafter.
+;;
+;; See `cedn --help` for usage.
+
+;; Both bb-bundled namespaces required at top level (sci's analyzer
+;; does whole-file pre-scan and won't see aliases declared inside a
+;; conditional). The actual choice between local-classpath vs Maven
+;; resolution is the runtime branch below.
+(require '[babashka.cli       :as cli]
+         '[babashka.classpath :as cp]
+         '[babashka.deps      :as deps])
+
+;; Single source of truth for both --version output and the Maven
+;; coord we resolve from Clojars. Bumped at release time.
+(def version "1.3.0")
+
+;; Dev vs release source resolution.
+(let [script-file (java.io.File. (System/getProperty "babashka.file"))
+      repo-root   (.getParentFile (.getCanonicalFile (.getParentFile script-file)))
+      src-dir     (java.io.File. repo-root "src")
+      cedn-core   (java.io.File. src-dir "cedn/core.cljc")]
+  (if (.exists cedn-core)
+    (cp/add-classpath (.getAbsolutePath src-dir))
+    (deps/add-deps {:deps {'com.github.franks42/cedn
+                           {:mvn/version version}}})))
+
+(require '[clojure.edn :as edn]
+         '[cedn.core :as cedn])
+
+;; ----- argument parsing -----
+
+(def cli-spec
+  {:objects {:alias :o :coerce :boolean
+             :desc "Concatenate forms with single-space separator (no trailing newline)"}
+   :input   {:alias :i :coerce :string
+             :desc "Read EDN from file instead of stdin"}
+   :output  {:coerce :string
+             :desc "Write canonical EDN to file instead of stdout"}
+   :edn     {:coerce :string
+             :desc "Read EDN from this argument (mutually exclusive with --input; ignores stdin)"}
+   :help    {:alias :h :coerce :boolean :desc "Display this help text and exit"}
+   :version {:alias :v :coerce :boolean :desc "Display version and exit"}})
+
+(def usage
+  "cedn — canonical EDN filter
+
+Reads zero or more top-level EDN forms from stdin (or --input/--edn)
+and emits each as canonical EDN to stdout (or --output) as raw UTF-8
+bytes — byte-stable across runs and platforms.
+
+USAGE:
+    cedn [OPTIONS]
+
+OPTIONS:
+    -i, --input <file>    Read EDN from file instead of stdin.
+    --output <file>       Write to file instead of stdout.
+    --edn <string>        Read EDN from this argument (mutually exclusive
+                          with --input; ignores stdin).
+    -o, --objects         Concatenate forms with single-space separator,
+                          no trailing newline. Default is newline-separated
+                          with trailing newline.
+    -h, --help            Display this help text and exit.
+    -v, --version         Display version and exit.
+
+EXIT CODES:
+    0  success
+    1  malformed EDN, EDN containing types cedn rejects, or I/O error
+    2  usage error (bad/conflicting flags)
+
+EXAMPLES:
+    # One-liner
+    cedn --edn '{:b 2 :a 1}'
+
+    # Hash a structured config
+    cat config.edn | cedn | sha256sum
+
+    # Convert in place
+    cedn --input config.edn --output config.canonical.edn
+
+    # Inspect canonical bytes as hex
+    cedn --edn '{:b 2 :a 1}' | xxd
+
+    # Round-trip via Nushell's from edn
+    {b: 2, a: 1} | to edn | ^cedn | from edn
+")
+
+(defn die [code prefix msg]
+  (binding [*out* *err*] (println "cedn:" prefix msg))
+  (System/exit code))
+
+(defn die-usage [msg]
+  (binding [*out* *err*]
+    (println "cedn:" msg)
+    (println)
+    (println usage))
+  (System/exit 2))
+
+;; ----- I/O construction -----
+
+(defn make-input-stream [{:keys [edn input]}]
+  (cond
+    edn   (java.io.ByteArrayInputStream. (.getBytes ^String edn "UTF-8"))
+    input (try (java.io.FileInputStream. ^String input)
+               (catch java.io.FileNotFoundException _
+                 (die 1 "input file not found:" input)))
+    :else System/in))
+
+(defn make-output-stream [{:keys [output]}]
+  (if output
+    (try (java.io.FileOutputStream. ^String output)
+         (catch java.io.IOException e
+           (die 1 "could not open output file:" (.getMessage e))))
+    System/out))
+
+(defn make-reader [^java.io.InputStream in]
+  (java.io.PushbackReader.
+   (java.io.InputStreamReader. in "UTF-8")))
+
+;; ----- core filter -----
+
+(defn emit-forms! [reader ^java.io.OutputStream out objects?]
+  (let [sep-bytes (.getBytes ^String (if objects? " " "\n") "UTF-8")]
+    (try
+      (loop [first? true]
+        (let [v (try (edn/read {:eof ::eof :readers cedn/readers} reader)
+                     (catch Throwable t
+                       (die 1 "parse error:" (.getMessage t))))]
+          (when (not= v ::eof)
+            (let [bs (try (cedn/canonical-bytes v)
+                          (catch Throwable t
+                            (die 1 "canonicalization error:" (.getMessage t))))]
+              (if objects?
+                (do (when-not first? (.write out sep-bytes))
+                    (.write out ^bytes bs))
+                (do (.write out ^bytes bs)
+                    (.write out sep-bytes)))
+              (.flush out))
+            (recur false))))
+      ;; EPIPE on downstream consumer close — exit cleanly with no error.
+      (catch java.io.IOException _ nil))))
+
+;; ----- main -----
+
+(let [opts (try (cli/parse-opts *command-line-args*
+                                {:spec cli-spec :restrict true})
+                (catch clojure.lang.ExceptionInfo e
+                  (die-usage (.getMessage e))))]
+  (cond
+    (:help opts)    (do (println usage) (System/exit 0))
+    (:version opts) (do (println "cedn" version) (System/exit 0))
+    (and (:edn opts) (:input opts))
+    (die-usage "--edn and --input are mutually exclusive"))
+  (let [in     (make-input-stream opts)
+        reader (make-reader in)
+        out    (make-output-stream opts)]
+    (try
+      (emit-forms! reader out (:objects opts))
+      (finally
+        (when (:output opts) (.close out))
+        (when (or (:input opts) (:edn opts)) (.close in))))))

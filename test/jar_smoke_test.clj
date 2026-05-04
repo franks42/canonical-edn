@@ -4,6 +4,7 @@
    This file is NOT on the normal src/test classpath — it is invoked
    by a separate clojure process whose only dep is the Maven artifact."
   (:require [clojure.test :refer [deftest is testing run-tests]]
+            [clojure.edn :as edn]
             [cedn.core :as cedn]))
 
 (deftest canonical-str-test
@@ -63,12 +64,12 @@
   (testing "#inst round-trip preserves nanoseconds"
     (let [inst (java.time.Instant/parse "2025-02-26T12:00:00.123456789Z")
           s (cedn/canonical-str inst)
-          v (clojure.edn/read-string {:readers cedn/readers} s)]
+          v (edn/read-string {:readers cedn/readers} s)]
       (is (= inst v))))
   (testing "#uuid round-trip"
     (let [u (java.util.UUID/randomUUID)
           s (cedn/canonical-str u)
-          v (clojure.edn/read-string {:readers cedn/readers} s)]
+          v (edn/read-string {:readers cedn/readers} s)]
       (is (= u v)))))
 
 (let [{:keys [fail error]} (run-tests)]

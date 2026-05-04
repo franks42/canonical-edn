@@ -13,7 +13,7 @@
                    [java.time Instant]
                    [java.util UUID])))
 
-(def version "1.2.0")
+(def version "1.3.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization
