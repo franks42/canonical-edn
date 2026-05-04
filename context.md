@@ -13,9 +13,32 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.2.0 — JVM + Babashka + nbb + shadow-cljs + Scittle (5 platforms), CEDN-P profile.  All testing automated.  Browser bundle published via jsdelivr CDN.  Maven JAR + local install + Clojars deploy via tools.build.**
+**v1.3.1 — CLI shipped (single bb script wrapping the library), released alongside the Clojars JAR via GitHub Actions. Library API unchanged from 1.2.0.**
 
-All modules done and tested on five platforms.  Zero production dependencies beyond Clojure.
+5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
+
+### v1.3.1 — release-workflow Maven-resolution fix
+
+Patch over v1.3.0. CI workflow now runs `clojure -P` (prefetch project deps) before `clojure -T:build deploy`, so `tools.build/create-basis` can resolve `org.clojure/clojure 1.12.0` on a fresh CI runner where `~/.m2` is empty. v1.3.0's tag is a dud (workflow failed before reaching deploy); v1.3.1 supersedes it.
+
+### v1.3.0 — `cedn` CLI shipped
+
+Single executable bb script (`bin/cedn`) wrapping the library. Distributed as a versioned GitHub Release asset (`cedn-vX.Y.Z`); user installs via curl + `chmod +x`.
+
+- **Subcommand-less**: positional input via `--edn <string>` / `--input <file>` / stdin; output via stdout / `--output <file>`.
+- **Streaming**: reads top-level EDN forms one at a time, emits canonical bytes immediately, EPIPE-clean.
+- **Two output modes**: default newline-separated with trailing newline, `--objects` for single-space-separated compact concatenation. Both produce raw UTF-8 bytes via `canonical-bytes` (no PrintWriter, no locale-encoding paths).
+- **Source loading**: dev mode (in-repo) uses local `src/` via `babashka.classpath/add-classpath`; release mode (downloaded artifact) uses `babashka.deps/add-deps` to resolve cedn from Clojars on first run, cached in `~/.m2`.
+
+Composes via Unix pipes:
+```
+data | to edn | ^cedn | sha256sum            # canonical-byte content hash
+data | to edn | ^cedn | from edn             # canonical round-trip via Nushell
+cat config.edn | cedn                         # normalize whitespace
+^uuidv7 gen --format edn | cedn | sha256sum  # cross-tool composition
+```
+
+The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github.franks42/cedn 1.3.1`.
 
 ### v1.2.0 Changes
 
@@ -111,14 +134,20 @@ design decisions, project state, and workflow notes across sessions.
 ```
 cedn/
 ├── deps.edn
-├── bb.edn                     ← Babashka project config
+├── bb.edn                     ← Babashka project config (test:bb, test:cli, install, release-check, etc.)
 ├── build.clj                  ← tools.build script (jar, install, deploy)
 ├── README.md                  ← Installation, usage, distribution docs
+├── CHANGELOG.md               ← Keep-a-Changelog format, current at v1.3.1
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
 ├── scittle-tests.html         ← Scittle browser test page (69 tests, loads dist/cedn.cljc)
+├── bin/
+│   └── cedn                   ← CLI filter (single bb script wrapping cedn.core)
 ├── dist/
 │   └── cedn.cljc              ← Concatenated CEDN source for Scittle/browser (auto-generated)
+├── .github/
+│   └── workflows/
+│       └── release.yml        ← v*.*.* tag → Clojars deploy + GH Release with bin/cedn asset
 ├── context.md                  ← this file
 ├── test/
 │   ├── jar_smoke_test.clj     ← JVM JAR dependency smoke test (bb test:jar)
