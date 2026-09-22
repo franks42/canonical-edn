@@ -203,3 +203,38 @@
   (is (= [nil true 3.14 42 "str" :kw '(2) [1] #{} {}]
          (sort cedn/rank
                [:kw "str" true 42 nil [1] '(2) #{} {} 3.14]))))
+
+;; --- Profiles (spec §8.6: profile confusion) ---
+
+(defn- profile-error
+  [f]
+  (try
+    (f)
+    nil
+    (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
+      (:cedn/error (ex-data e)))))
+
+(deftest profile-rejection-test
+  (testing ":cedn-r is specified but not implemented — never silently CEDN-P"
+    (are [f] (= :cedn/unsupported-profile (profile-error f))
+      #(cedn/canonical-str {:a 1} {:profile :cedn-r})
+      #(cedn/canonical-bytes {:a 1} {:profile :cedn-r})
+      #(cedn/valid? {:a 1} {:profile :cedn-r})
+      #(cedn/explain {:a 1} {:profile :cedn-r})
+      #(cedn/assert! {:a 1} {:profile :cedn-r})
+      #(cedn/canonical? "{:a 1}" {:profile :cedn-r})))
+  (testing "unknown profiles are rejected too"
+    (are [f] (= :cedn/unknown-profile (profile-error f))
+      #(cedn/canonical-str {:a 1} {:profile :nonsense})
+      #(cedn/canonical-bytes {:a 1} {:profile nil})
+      #(cedn/valid? {:a 1} {:profile "cedn-p"})
+      #(cedn/canonical? "{:a 1}" {:profile :cedn-q})))
+  (testing "inspect never throws, so it reports the error instead"
+    (let [r (cedn/inspect {:a 1} {:profile :cedn-r})]
+      (is (= :error (:status r)))
+      (is (= :cedn/unsupported-profile (:cedn/error (first (:errors r)))))
+      (is (nil? (:canonical r)))))
+  (testing ":cedn-p still works, explicitly and by default"
+    (is (= "{:a 1}" (cedn/canonical-str {:a 1} {:profile :cedn-p})))
+    (is (= "{:a 1}" (cedn/canonical-str {:a 1} {})))
+    (is (= "{:a 1}" (cedn/canonical-str {:a 1})))))

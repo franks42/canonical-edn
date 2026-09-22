@@ -123,12 +123,23 @@
 
 (defn schema-for
   "Returns the profile keyword for the given profile.
-  Validates that the profile is known."
+  Validates that the profile is known and implemented.
+
+  :cedn-r (spec §4) is deliberately not implemented: CEDN-P covers the
+  intended use cases, and silently emitting CEDN-P bytes for a caller
+  who asked for CEDN-R is exactly the profile confusion the spec warns
+  about (§8.6)."
   [profile]
   (case profile
     :cedn-p :cedn-p
+    :cedn-r (throw (ex-info "CEDN profile :cedn-r is not implemented — use :cedn-p"
+                            {:cedn/error   :cedn/unsupported-profile
+                             :cedn/profile profile}))
     (throw (ex-info (str "Unknown CEDN profile: " profile)
-                    {:profile profile}))))
+                    {:cedn/error   :cedn/unknown-profile
+                     :cedn/profile profile
+                     ;; kept for compatibility with pre-1.5 callers
+                     :profile      profile}))))
 
 (defn valid?
   "Schema-level type check. Fast, no canonicalization."

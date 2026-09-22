@@ -23,12 +23,16 @@
   "Canonicalize an EDN value to a UTF-8 byte array.
 
   Options:
-    :profile  — :cedn-p (default) or :cedn-r
-    :validate — if true, run schema validation before canonicalization"
+    :profile  — :cedn-p (the only implemented profile)
+    :validate — if true, run schema validation before canonicalization
+
+  Throws on any other profile rather than quietly producing CEDN-P
+  bytes for a caller who asked for something else (spec §8.6)."
   ([value]
    (canonical-bytes value {}))
   ([value {:keys [profile validate]
            :or   {profile :cedn-p validate false}}]
+   (schema/schema-for profile)
    (when validate
      (when-let [explanation (schema/explain profile value)]
        (throw (ex-info "CEDN type violation" explanation))))
@@ -44,6 +48,7 @@
   ([value]
    (canonical-str value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
+   (schema/schema-for profile)
    (emit/emit-str profile value)))
 
 ;; =============================================================
@@ -108,6 +113,7 @@
    (inspect value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
    (try
+     (schema/schema-for profile)
      (let [bs (canonical-bytes value {:profile profile})
            s  #?(:clj (String. ^bytes bs "UTF-8")
                  :cljs (let [decoder (js/TextDecoder.)]
@@ -154,6 +160,7 @@
   ([edn-str]
    (canonical? edn-str {}))
   ([edn-str {:keys [profile] :or {profile :cedn-p}}]
+   (schema/schema-for profile)
    (try
      (let [value (edn/read-string {:readers readers} edn-str)
            result (canonical-str value {:profile profile})]

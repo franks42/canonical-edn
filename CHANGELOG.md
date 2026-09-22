@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Profiles are no longer accepted and ignored.** `canonical-str`,
+  `canonical-bytes`, `valid?`, `explain`, `assert!` and `canonical?`
+  took any `:profile` value and produced CEDN-P output, so a caller who
+  asked for `:cedn-r` silently got portable-profile bytes — the profile
+  confusion the spec warns about (§8.6). `:cedn-r` now throws
+  `:cedn/unsupported-profile` ("not implemented — use :cedn-p") and
+  anything else throws `:cedn/unknown-profile`. `inspect` keeps its
+  never-throws contract and reports the error in `:errors`.
+
 ### Changed
 
 - `cedn.gen/gen-uuid` draws from a new fixed `cedn.gen/uuid-pool` instead
@@ -15,6 +26,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing case was unreproducible. The pool leads with the nil, max and
   signed-64-bit-boundary UUIDs, so shrinking lands on an edge case. Tests
   elsewhere use fixed UUID literals.
+- `docs/cedn-spec.md` specifies `#bytes` (new §3.14), which had shipped
+  in 1.2.0 without ever being written down: lowercase hex, two digits
+  per octet, no separators, `#bytes ""` for empty, and readers must
+  reject odd-length or non-hex payloads. Later subsections renumbered
+  (general policy 3.14→3.15, metadata 3.15→3.16, unsupported types
+  3.16→3.17).
 - CI now also runs ClojureScript (shadow-cljs), nbb, the nbb
   git-dependency path and the Scittle browser tests, and both CI and the
   release workflow fail if `dist/cedn.cljc` is stale relative to `src/`.

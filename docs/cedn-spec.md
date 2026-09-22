@@ -772,14 +772,60 @@ Normative rules:
   #uuid "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6"   ; uppercase
 ```
 
-### 3.14. Tagged Literals: General Policy
+### 3.14. Tagged Literal: `#bytes`
 
-CEDN-P v1 restricts tagged literals to `#inst` and `#uuid` only.
-Custom tagged literals are not permitted in the portable profile.
+**Canonical form**: The six characters `#bytes` followed by a single
+space and a lowercase hexadecimal string enclosed in double quotes,
+two hex digits per octet, with no separators.
 
-> **Rationale:**  Limiting to the two built-in tags keeps the
-> portable profile simple, self-contained, and interoperable
-> across all Clojure runtimes without requiring tag registries.
+Normative rules:
+
+1.  Each octet MUST be rendered as exactly two hexadecimal digits,
+    zero-padded (`0f`, not `f`).
+2.  All hexadecimal digits MUST be lowercase.
+3.  Digits MUST NOT be separated or prefixed: no spaces, hyphens, or
+    `0x`.
+4.  The empty octet sequence is `#bytes ""`.
+5.  The value is an uninterpreted sequence of octets.  Implementations
+    MUST NOT apply text decoding, compression, or base-N re-encoding.
+6.  A reader of canonical text MUST reject a `#bytes` literal whose
+    payload has an odd number of digits or contains a non-hex
+    character, rather than reading a truncated value (Section 8.2).
+
+The runtime type is the platform's octet-sequence type: `byte[]` on
+the JVM, `Uint8Array` on JavaScript.  Signedness of the platform's
+byte type is not observable in canonical output — octets are rendered
+as unsigned values 00–ff.
+
+Ordering is defined in Section 5.3.10: unsigned lexicographic by
+octet, shorter first, which equals lexicographic order of the
+canonical hex strings.
+
+```
+  Canonical:
+  #bytes ""
+  #bytes "00"
+  #bytes "deadbeef"
+
+  NOT canonical:
+  #bytes "DEADBEEF"     ; uppercase
+  #bytes "de ad be ef"  ; separators
+  #bytes "0xdeadbeef"   ; prefix
+  #bytes "f"            ; odd digit count
+```
+
+### 3.15. Tagged Literals: General Policy
+
+CEDN-P v1 restricts tagged literals to `#inst`, `#uuid` and `#bytes`
+only.  Custom tagged literals are not permitted in the portable
+profile.
+
+> **Rationale:**  Limiting to this fixed set keeps the portable
+> profile simple, self-contained, and interoperable across all
+> Clojure runtimes without requiring tag registries.  `#inst` and
+> `#uuid` are built into EDN; `#bytes` is defined here because
+> cryptographic payloads (hashes, signatures, keys) are octet
+> sequences with no portable EDN representation otherwise.
 
 If a future profile permits custom tags, the following rules apply:
 
@@ -794,13 +840,13 @@ The tag's semantic meaning is OPAQUE to canonicalization.  CEDN
 normalizes syntax and nested value structure only; it does not
 interpret tag-specific semantics.
 
-### 3.15. Metadata
+### 3.16. Metadata
 
 Metadata MUST be silently stripped during canonicalization.  It MUST
 NOT appear in canonical output.  This is consistent with metadata's
 intended role as orthogonal to value equality in Clojure.
 
-### 3.16. Unsupported Types
+### 3.17. Unsupported Types
 
 The following types MUST cause an `unsupported-type` error
 (Section 7) under CEDN-P:
@@ -812,8 +858,9 @@ The following types MUST cause an `unsupported-type` error
 -  Records and deftypes (rendered as maps, see Section 3.11)
 -  Regex patterns (`#"..."`)
 -  Functions, vars, atoms, refs, agents
--  Host objects (Java collections, JS arrays, etc.)
--  Any type not enumerated in Sections 3.1–3.14
+-  Host objects (Java collections, JS arrays, etc.) other than the
+   octet-sequence types covered by Section 3.14
+-  Any type not enumerated in Sections 3.1–3.15
 
 > **Clarification:** Records are normalized to their map
 > representation per Section 3.11, losing type identity.  This is
@@ -1133,7 +1180,7 @@ worse than no output.
   Error class          Trigger
   -----------          -------
   unsupported-type     Value has no canonical form in the active
-                       profile (Section 3.16).
+                       profile (Section 3.17).
 
   invalid-number       Double value is NaN, Infinity, or -Infinity
                        (Section 3.4).
@@ -1145,7 +1192,7 @@ worse than no output.
 
   invalid-tag-form     Tagged literal whose nested value cannot be
                        canonicalized under the active profile
-                       (Section 3.14).
+                       (Section 3.15).
 
   invalid-unicode      String contains unpaired UTF-16 surrogates
                        (Section 3.5.4).
@@ -1433,6 +1480,7 @@ valid EDN.
 
   ; For #inst: value is canonical-string per Section 3.12.
   ; For #uuid: value is canonical-string per Section 3.13.
+  ; For #bytes: value is canonical-string per Section 3.14.
 
   ; --- CEDN-R Extensions (Section 4) ---
 
@@ -1617,6 +1665,10 @@ handled deterministically and injectively is unchanged.
 -  Section 5.3.10: explicit ordering for `#bytes`, `#inst`
    (chronological) and `#uuid` (canonical string); platform
    `toString()` is forbidden for ordering.
+-  Section 3.14 (new): `#bytes`, shipped since v1.2.0 of the reference
+   implementation, is now specified; the following subsections are
+   renumbered (general policy 3.14→3.15, metadata 3.15→3.16,
+   unsupported types 3.16→3.17).
 -  Section 3.12: `#inst` years are restricted to 0000–9999, the range
    RFC 3339 can express; `out-of-range` (Section 7.1) covers it.
 -  Section 3.5.4: rationale added; the rule itself is unchanged.

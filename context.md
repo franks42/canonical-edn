@@ -130,7 +130,17 @@ design decisions, project state, and workflow notes across sessions.
    Both readers are strict and share one grammar across platforms — see
    decision 12.  `canonical?` uses `readers` internally on all platforms.
 
-6. **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
+6. **CEDN-R is not implemented, and is now rejected rather than ignored.**
+   `:cedn-r` (spec §4) is a real extension — BigInt, BigDecimal, ratios,
+   characters, plus their ordering — not a flag flip, and CEDN-P covers
+   the use cases.  Until v1.4.0 the emit path accepted any `:profile`
+   and ignored it, so asking for `:cedn-r` silently produced CEDN-P
+   bytes (spec §8.6, profile confusion).  Every entry point now calls
+   `schema/schema-for`: `:cedn-r` throws `:cedn/unsupported-profile`,
+   anything else `:cedn/unknown-profile`.  `inspect` reports it in
+   `:errors` instead of throwing, per its contract.
+
+   **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
    All policy statements must use only CEDN-P data types.  CEDN-R
    (BigInt, BigDecimal, ratios) is not needed for authorization use
    cases and is deprioritized indefinitely.  Rationale:
