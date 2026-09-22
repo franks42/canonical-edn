@@ -175,7 +175,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 {:deps {com.github.franks42/cedn
         {:git/url "https://github.com/franks42/canonical-edn"
          :git/tag "v1.5.1"
-         :git/sha "eac1b3a"}}}
+         :git/sha "359a9bc"}}}
 ```
 
 ### Scittle (Browser)
