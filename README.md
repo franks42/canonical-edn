@@ -158,13 +158,13 @@ escaped while `café` stays literal UTF-8.
 ### deps.edn
 
 ```clojure
-com.github.franks42/cedn {:mvn/version "1.5.0"}
+com.github.franks42/cedn {:mvn/version "1.5.1"}
 ```
 
 ### Babashka (bb.edn)
 
 ```clojure
-{:deps {com.github.franks42/cedn {:mvn/version "1.5.0"}}}
+{:deps {com.github.franks42/cedn {:mvn/version "1.5.1"}}}
 ```
 
 ### nbb (nbb.edn)
@@ -174,7 +174,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 ```clojure
 {:deps {com.github.franks42/cedn
         {:git/url "https://github.com/franks42/canonical-edn"
-         :git/tag "v1.5.0"
+         :git/tag "v1.5.1"
          :git/sha "eac1b3a"}}}
 ```
 
@@ -231,7 +231,7 @@ as `:cedn-p`.
                                     ;   never throws; :sha-256 is nil on JS
 (sort cedn/rank values)             ; → the spec's total ordering
 cedn/readers                        ; → strict #inst / #uuid / #bytes readers
-cedn/version                        ; → "1.5.0"
+cedn/version                        ; → "1.5.1"
 ```
 
 Reading back canonical text needs `cedn/readers`, which preserve
@@ -249,7 +249,7 @@ precision and reject malformed literals:
 from the [latest release](https://github.com/franks42/canonical-edn/releases/latest):
 
 ```bash
-curl -fsSL -o cedn https://github.com/franks42/canonical-edn/releases/download/v1.5.0/cedn-v1.5.0
+curl -fsSL -o cedn https://github.com/franks42/canonical-edn/releases/download/v1.5.1/cedn-v1.5.1
 chmod +x cedn
 ```
 

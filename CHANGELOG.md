@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Active dev cycle. Bump the `version` constants in `bin/cedn`,
+`src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
+`release.yml` refuses to release otherwise — before tagging the next
+release.)
+
+## [1.5.1] — 2026-09-22 — Documentation
+
+No library code changes: `src/` is identical to 1.5.0 apart from the
+version constant. Documentation, tests and test data only.
+
 ### Changed
 
 - The compliance vector now contains **every** CEDN-P type: `#bytes` and
@@ -22,11 +32,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tests for the fixed-point property (spec §1.2.3): canonicalizing
   canonical output is a no-op, checked over the all-types vector and
   through the CLI (`cedn | cedn | cedn`).
-
-(Active dev cycle. Bump the `version` constants in `bin/cedn`,
-`src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
-`release.yml` refuses to release otherwise — before tagging the next
-release.)
 
 ## [1.5.0] — 2026-09-22 — Profile enforcement, strict `#uuid`, CLI I/O
 

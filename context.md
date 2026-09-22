@@ -13,9 +13,21 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.5.0 — profile enforcement, strict `#uuid`, CLI I/O correctness. Builds on v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
+**v1.5.1 — documentation release (no library code change). v1.5.0 brought profile enforcement, strict `#uuid` and CLI I/O correctness, on top of v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
+
+### v1.5.1 — documentation
+
+README rewritten around the two properties that define the library:
+idempotence (many equivalent EDN spellings collapse to one canonical
+form, and that form is itself EDN, so re-encoding is a no-op) and the
+single all-types example with its canonical output.  Also added: the API
+listing, the `cedn` CLI (undocumented since it shipped in 1.3.0), the
+error table, and pointers to the spec and golden vectors.  The
+compliance vector gained `#bytes` and the empty collections — it claimed
+to cover every CEDN-P type but did not.  `docs/cedn-api-design.cljc` is
+marked historical.  Spec §3.3 gained a note on BigInt vs `out-of-range`.
 
 ### v1.5.0 — profile enforcement and remaining review items
 
@@ -81,7 +93,7 @@ The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.5.0"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.5.1"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
