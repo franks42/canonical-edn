@@ -72,10 +72,15 @@
              :task (shell "clojure" "-T:build" "install")}
 
   test:jar  {:doc  "Install JAR, then smoke-test it from Maven (no src on classpath)"
+             ;; Version is read from build.clj so this always tests the JAR
+             ;; that `install` just built, never a stale one from ~/.m2.
              :task (do (run 'install)
-                       (shell "clojure"
-                              "-Sdeps" "{:paths [\"test\"] :deps {com.github.franks42/cedn {:mvn/version \"1.2.0\"}}}"
-                              "-M" "-m" "jar-smoke-test"))}
+                       (let [ver (second (re-find (re-pattern "\\(def version\\s+\"([^\"]+)\"")
+                                                  (slurp "build.clj")))]
+                         (shell "clojure"
+                                "-Sdeps" (str "{:paths [\"test\"] :deps "
+                                              "{com.github.franks42/cedn {:mvn/version \"" ver "\"}}}")
+                                "-M" "-m" "jar-smoke-test")))}
 
   test:nbb-dep {:doc  "Smoke-test CEDN via nbb with git dependency (nbb.edn pattern)"
                 :task (let [dir  (str (System/getProperty "java.io.tmpdir") "/cedn-nbb-dep-test")

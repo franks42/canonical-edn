@@ -115,7 +115,16 @@
 ;; --- version ---
 
 (deftest version-test
-  (is (= "1.3.1" cedn/version)))
+  (is (re-matches #"\d+\.\d+\.\d+" cedn/version))
+  #?(:clj
+     ;; The version is repeated in build.clj (Maven coord) and bin/cedn
+     ;; (CLI + the coord it resolves). release.yml checks those two
+     ;; against the tag; this checks cedn.core agrees with them.
+     (testing "all three version constants agree"
+       (doseq [f ["build.clj" "bin/cedn"]]
+         (is (= cedn/version
+                (second (re-find #"\(def version\s+\"([^\"]+)\"" (slurp f))))
+             f)))))
 
 ;; --- #bytes round-trip ---
 

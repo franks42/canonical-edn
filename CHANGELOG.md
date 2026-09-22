@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-(Active dev cycle. Drop the `-SNAPSHOT` suffix on `bin/cedn`'s `version`
-constant — and bump the matching constants in `src/cedn/core.cljc` and
-`build.clj` — before tagging the next release.)
+(Active dev cycle. Bump the `version` constants in `bin/cedn`,
+`src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
+`release.yml` refuses to release otherwise — before tagging the next
+release.)
+
+## [1.4.0] — 2026-09-22 — Determinism, injectivity and strict readers
 
 Canonicalization fixes for determinism and injectivity. **Output
 changes** for inputs that previously hit these bugs (sets/maps of
@@ -88,6 +91,9 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
   that namespace ran its tests and called `System/exit` at load time,
   ending the JVM (exit 0) before the real suite ran. It now exits only
   from `-main`, and the runner is restricted to `cedn.*` namespaces.
+- `bb test:jar` smoke-tested a hard-coded `1.2.0` from `~/.m2` instead of
+  the JAR it had just installed; it now reads the version from
+  `build.clj`.
 
 ## [1.3.1] — 2026-05-04 — Release-workflow fix
 

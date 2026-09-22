@@ -1172,7 +1172,7 @@
   #?(:clj (:import [java.security MessageDigest]
                    [java.util UUID])))
 
-(def version "1.3.1")
+(def version "1.4.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization

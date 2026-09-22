@@ -32,13 +32,13 @@ Zero production dependencies beyond Clojure itself.
 ### deps.edn
 
 ```clojure
-com.github.franks42/cedn {:mvn/version "1.1.0"}
+com.github.franks42/cedn {:mvn/version "1.4.0"}
 ```
 
 ### Babashka (bb.edn)
 
 ```clojure
-{:deps {com.github.franks42/cedn {:mvn/version "1.1.0"}}}
+{:deps {com.github.franks42/cedn {:mvn/version "1.4.0"}}}
 ```
 
 ### nbb (nbb.edn)
@@ -48,7 +48,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 ```clojure
 {:deps {com.github.franks42/cedn
         {:git/url "https://github.com/franks42/canonical-edn"
-         :git/tag "v1.1.0"
+         :git/tag "v1.4.0"
          :git/sha "03fe8e3"}}}
 ```
 

@@ -13,9 +13,22 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.3.1 — CLI shipped (single bb script wrapping the library), released alongside the Clojars JAR via GitHub Actions. Library API unchanged from 1.2.0.**
+**v1.4.0 — determinism, injectivity and strict readers. Canonical output changes for inputs that hit the fixed bugs; some previously-accepted inputs are now rejected. Requires JDK 19+ on the JVM.**
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
+
+### v1.4.0 — canonicalization fixes (decisions 7–13)
+
+A review found cases where the same value produced different bytes, or
+different values produced the same bytes.  `#inst` ordering no longer
+goes through `Date.toString` (timezone-dependent), numeric ordering is
+exact above 2^53, duplicates are detected by canonical text, unpaired
+surrogates and unusable keyword/symbol names are rejected, `#inst` years
+are limited to 0000–9999, and the `#inst`/`#bytes` readers are strict and
+parse identically on every platform.  cedn now refuses to load on a JVM
+older than JDK 19, where `Double/toString` is not shortest-round-trip.
+Two new internal namespaces: `cedn.token`, `cedn.reader`.  CI
+(`.github/workflows/ci.yml`) runs on every push and PR.
 
 ### v1.3.1 — release-workflow Maven-resolution fix
 
@@ -57,7 +70,7 @@ The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.2.0"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.4.0"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
