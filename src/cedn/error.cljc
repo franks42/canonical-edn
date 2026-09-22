@@ -55,6 +55,16 @@
                                  :cedn/value value
                                  :cedn/path  path}))))
 
+(defn reader-error!
+  "Throw :cedn/invalid-tag-form for tagged-literal text that cannot be
+  read back as exactly one canonical value."
+  [tag text reason]
+  (throw (ex-info (str "CEDN: cannot read #" tag " literal: " reason)
+                  {:cedn/error  :cedn/invalid-tag-form
+                   :cedn/tag    tag
+                   :cedn/value  text
+                   :cedn/reason reason})))
+
 (defn invalid-name!
   "Throw :cedn/invalid-name for keywords/symbols whose namespace or name
   cannot be serialized as a distinct EDN token."

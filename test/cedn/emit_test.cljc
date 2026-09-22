@@ -334,3 +334,28 @@
       'foo/nil          "foo/nil"
       '+                "+"
       '<=>              "<=>")))
+
+;; --- #inst year range (§3.12: exactly four year digits) ---
+
+(deftest emit-inst-year-range-test
+  (testing "years outside 0000-9999 cannot be written as RFC 3339"
+    #?(:clj
+       (are [v] (= :cedn/out-of-range (error-class v))
+         (Instant/parse "+10000-01-01T00:00:00Z")
+         (Instant/parse "-0001-01-01T00:00:00Z")
+         (Instant/parse "+99999-01-01T00:00:00Z"))
+       :cljs
+       (are [iso] (= :cedn/out-of-range (error-class (js/Date. iso)))
+         "+010000-01-01T00:00:00Z"
+         "-000001-01-01T00:00:00Z")))
+  (testing "the boundary years are fine"
+    (is (= "#inst \"0000-01-01T00:00:00.000000000Z\""
+           (emit/emit-str :cedn-p #?(:clj  (Instant/parse "0000-01-01T00:00:00Z")
+                                     :cljs (let [d (js/Date. 0)]
+                                             (.setUTCFullYear d 0)
+                                             (.setUTCMonth d 0 1)
+                                             (.setUTCHours d 0 0 0 0)
+                                             d)))))
+    (is (= "#inst \"9999-12-31T23:59:59.000000000Z\""
+           (emit/emit-str :cedn-p #?(:clj  (Instant/parse "9999-12-31T23:59:59Z")
+                                     :cljs (js/Date. "9999-12-31T23:59:59Z")))))))

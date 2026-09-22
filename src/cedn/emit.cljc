@@ -70,9 +70,13 @@
                   (instance? Date v) (.toInstant ^Date v)
                   :else (err/unsupported-type! v))
            zdt (.atZone ^Instant inst ZoneOffset/UTC)
-           nano (.getNano ^Instant inst)]
+           nano (.getNano ^Instant inst)
+           year (.getYear zdt)]
+       ;; RFC 3339 has exactly four year digits (§3.12)
+       (when-not (<= 0 year 9999)
+         (err/out-of-range! v))
        (format "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
-               (.getYear zdt) (.getMonthValue zdt) (.getDayOfMonth zdt)
+               year (.getMonthValue zdt) (.getDayOfMonth zdt)
                (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano))))
 
 #?(:cljs
@@ -85,6 +89,9 @@
      (let [pad (fn [n w] (let [s (str n)]
                            (str (apply str (repeat (- w (count s)) "0")) s)))
            y (.getUTCFullYear v)
+           _ (when-not (and (>= y 0) (<= y 9999))
+               ;; RFC 3339 has exactly four year digits (§3.12)
+               (err/out-of-range! v))
            m (inc (.getUTCMonth v))
            d (.getUTCDate v)
            h (.getUTCHours v)

@@ -714,6 +714,11 @@ Normative rules:
 3.  The timestamp MUST be formatted from the underlying epoch
     value directly.  Implementations MUST NOT delegate to the
     platform's `toString()` or `pr-str` for the date object.
+4.  The year MUST be in the range 0000–9999, since RFC 3339 has
+    exactly four year digits.  Values outside it MUST cause an
+    `out-of-range` error (Section 7); implementations MUST NOT emit
+    a five-digit or negative year, which no EDN reader accepts and
+    which platforms pad differently.
 
 Platforms with lower precision (e.g., `java.util.Date` and
 `js/Date` at millisecond resolution) MUST zero-pad the
@@ -1133,8 +1138,10 @@ worse than no output.
   invalid-number       Double value is NaN, Infinity, or -Infinity
                        (Section 3.4).
 
-  out-of-range         Integer value outside 64-bit signed range
-                       in CEDN-P (Section 3.3).
+  out-of-range         Value outside the range CEDN-P can represent:
+                       integers outside 64-bit signed range
+                       (Section 3.3), or an #inst whose year is not
+                       in 0000-9999 (Section 3.12).
 
   invalid-tag-form     Tagged literal whose nested value cannot be
                        canonicalized under the active profile
@@ -1610,6 +1617,8 @@ handled deterministically and injectively is unchanged.
 -  Section 5.3.10: explicit ordering for `#bytes`, `#inst`
    (chronological) and `#uuid` (canonical string); platform
    `toString()` is forbidden for ordering.
+-  Section 3.12: `#inst` years are restricted to 0000–9999, the range
+   RFC 3339 can express; `out-of-range` (Section 7.1) covers it.
 -  Section 3.5.4: rationale added; the rule itself is unchanged.
 -  Section 8.7 (new): injectivity as a security property.
 

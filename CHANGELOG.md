@@ -36,6 +36,22 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
   `:cedn/invalid-unicode` (spec §3.5.4). Previously the JVM encoded them
   as `?`, colliding with `"?"`.
 
+### Fixed (readers and `#inst` range)
+
+- `#inst` values with a year outside 0000–9999 now throw
+  `:cedn/out-of-range` instead of emitting invalid RFC 3339 such as
+  `#inst "10000-01-01…"` or `#inst "-001-01-01…"` (spec §3.12 rule 4).
+- The `#bytes` reader no longer truncates: `#bytes "abc"` threw away the
+  trailing digit and non-hex input threw a raw `NumberFormatException`.
+  It now requires an even-length hex string and throws
+  `:cedn/invalid-tag-form` with a `:cedn/reason`.
+- The `#inst` reader accepts the full EDN timestamp grammar (`#inst
+  "2020"`, `"2020-01-01"`, `"…T10:20"`, `±HH:MM` offsets), which the
+  JVM's `Instant/parse` rejected, and parses it identically on every
+  platform — `js/Date.` read an offset-less timestamp as local time
+  where EDN means UTC. Leap seconds are rejected rather than silently
+  rolled into the next minute. This also applies to the `cedn` CLI.
+
 ### Added
 
 - `:cedn/invalid-name` error: keywords and symbols whose names would
@@ -43,8 +59,9 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
   `(symbol "1")`, `(keyword "a b")`, `(keyword "a/b" "c")`. Rules are in
   new spec §3.6.1; `:200`, `clojure.core//` and `foo/nil` remain valid.
   `valid?` / `explain` apply the same checks.
-- `cedn.token` namespace (internal) holding the lexical checks;
-  `dist/cedn.cljc` includes it.
+- `cedn.token` and `cedn.reader` namespaces (internal), holding the
+  lexical checks and the strict tagged-literal readers; `dist/cedn.cljc`
+  includes both.
 - Tests for each fix, plus adversarial property tests (name round-trip,
   arbitrary UTF-16 strings, map key-order independence).
 - CI workflow (`.github/workflows/ci.yml`): JVM, bb and CLI tests, lint

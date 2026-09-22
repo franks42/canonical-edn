@@ -7,10 +7,10 @@
   Everything else is built on this."
   (:require [cedn.emit   :as emit]
             [cedn.order  :as order]
+            [cedn.reader :as reader]
             [cedn.schema :as schema]
             [clojure.edn :as edn])
   #?(:clj (:import [java.security MessageDigest]
-                   [java.time Instant]
                    [java.util UUID])))
 
 (def version "1.3.1")
@@ -132,33 +132,22 @@
 ;; 4. Canonical readers
 ;; =============================================================
 
-(defn- hex->bytes
-  "Parse a hex string into a byte array."
-  [s]
-  #?(:clj  (let [n (/ (count s) 2)
-                 bs (byte-array n)]
-             (dotimes [i n]
-               (aset bs i (unchecked-byte
-                           (Integer/parseInt (subs s (* i 2) (+ (* i 2) 2)) 16))))
-             bs)
-     :cljs (let [n (/ (count s) 2)
-                 arr (js/Uint8Array. n)]
-             (dotimes [i n]
-               (aset arr i (js/parseInt (.substring s (* i 2) (+ (* i 2) 2)) 16)))
-             arr)))
-
 (def readers
   "EDN readers that produce canonical Clojure data types.
 
   Use with clojure.edn/read-string for precision-preserving round-trips:
-    (edn/read-string {:readers cedn/readers} canonical-edn-str)"
-  #?(:clj  {'inst  #(Instant/parse %)
+    (edn/read-string {:readers cedn/readers} canonical-edn-str)
+
+  #inst yields java.time.Instant (nanosecond precision) on the JVM and
+  js/Date on JS; the full EDN timestamp grammar is accepted and parsed
+  identically on every platform.  #bytes requires an even-length hex
+  string.  Malformed input throws rather than reading a partial value."
+  #?(:clj  {'inst  reader/parse-inst
             'uuid  #(UUID/fromString %)
-            'bytes hex->bytes}
+            'bytes reader/hex->bytes}
      ;; CLJS: built-in #uuid reader already produces cljs.core/UUID.
-     ;; Only override #inst to ensure js/Date construction.
-     :cljs {'inst  #(js/Date. %)
-            'bytes hex->bytes}))
+     :cljs {'inst  reader/parse-inst
+            'bytes reader/hex->bytes}))
 
 (defn canonical?
   "Given an EDN string, returns true if it is already in canonical form."

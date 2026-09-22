@@ -108,13 +108,14 @@ design decisions, project state, and workflow notes across sessions.
    only for astral-plane characters (U+10000+).
 
 5. **`readers` map for canonical round-trips.**
-   JVM: `cedn/readers` maps `#inst` → `Instant/parse`, `#uuid` → `UUID/fromString`,
-   `#bytes` → `hex->bytes` (returns `byte[]`).
+   `cedn/readers` maps `#inst` → `cedn.reader/parse-inst` and `#bytes` →
+   `cedn.reader/hex->bytes`; on the JVM also `#uuid` → `UUID/fromString`
+   (CLJS's built-in `#uuid` reader already produces `cljs.core/UUID`).
    The default EDN reader produces `java.util.Date` (ms precision), losing sub-ms digits
-   from the 9-fractional-digit canonical `#inst` form. `Instant/parse` preserves nanosecond
-   precision. CLJS: overrides `#inst` → `js/Date.` and `#bytes` → `hex->bytes` (returns
-   `js/Uint8Array`); built-in EDN reader handles `#uuid`.
-   `canonical?` uses `readers` internally on all platforms.
+   from the 9-fractional-digit canonical `#inst` form; `parse-inst` returns a
+   `java.time.Instant` and preserves nanoseconds (`js/Date`, ms, on CLJS).
+   Both readers are strict and share one grammar across platforms — see
+   decision 12.  `canonical?` uses `readers` internally on all platforms.
 
 6. **KEX/Biscuit policies → CEDN-P only (no CEDN-R).**
    All policy statements must use only CEDN-P data types.  CEDN-R
@@ -197,7 +198,28 @@ them; spec text updated accordingly (see spec Appendix D).
     emit invalid RFC 3339; `#bytes` reader accepts odd-length/non-hex
     input.
 
-12. **JVM test suite actually runs; CI on push/PR.**
+12. **Readers are strict and platform-uniform; `#inst` years 0000–9999.**
+    Three reader/emit edge cases from the review:
+    - `#inst` outside 0000–9999 emitted invalid RFC 3339 (`10000-01-01`,
+      `-001-01-01` on JVM vs. different padding on CLJS).  Now an
+      `out-of-range` error on both platforms (spec §3.12 rule 4).
+    - The `#bytes` reader silently truncated: `#bytes "abc"` read as one
+      byte, and non-hex threw a raw `NumberFormatException`.  Now requires
+      an even-length hex string (upper or lower case) and throws
+      `:cedn/invalid-tag-form` with a reason.
+    - The JVM `#inst` reader (`Instant/parse`) rejected `#inst
+      "2020-01-01"`, which is valid EDN, so the CLI refused input other
+      tools produce.  CLJS was worse: `js/Date.` reads
+      `"2020-01-01T10:20"` as *local* time where EDN means UTC, so the
+      two platforms read the same document differently.
+
+    New `cedn.reader` ns parses the whole EDN timestamp grammar with
+    shared `.cljc` code (regex + range validation, leap years, offsets),
+    then constructs `Instant` (ns precision) or `js/Date` (ms).  Leap
+    seconds are rejected: java.time refuses them and JS rolls silently
+    into the next minute, so neither can represent one.
+
+13. **JVM test suite actually runs; CI on push/PR.**
     `test/jar_smoke_test.clj` called `(run-tests)` + `System/exit` at
     load time.  The test runner requires every discovered namespace
     before running any, so loading it exited the JVM — with status 0 —
@@ -249,6 +271,7 @@ cedn/
 │       ├── number.cljc         ← ECMAScript double formatting
 │       ├── error.cljc          ← structured error constructors
 │       ├── token.cljc          ← surrogate + keyword/symbol name validity
+│       ├── reader.cljc         ← #inst / #bytes readers (strict, shared grammar)
 │       ├── schema.cljc         ← hand-written type predicates
 │       └── gen.cljc            ← test.check generators
 └── test/
@@ -262,6 +285,7 @@ cedn/
         ├── error_test.cljc     ← error constructor tests
         ├── schema_test.cljc    ← schema validation tests
         ├── token_test.cljc     ← string/keyword/symbol lexical rules
+        ├── reader_test.cljc    ← #inst grammar + #bytes reader strictness
         ├── property_test.cljc  ← generative property tests
         └── xplatform_test.cljc ← cross-platform byte comparison tests
 ```
@@ -466,6 +490,8 @@ cedn.core
   │     ├── cedn.number
   │     ├── cedn.order
   │     ├── cedn.token
+  │     └── cedn.error
+  ├── cedn.reader (#inst / #bytes readers)
   │     └── cedn.error
   ├── cedn.schema
   │     └── cedn.token
