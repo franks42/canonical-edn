@@ -79,6 +79,9 @@ jobs:
         # build.clj fails with "Could not find artifact org.clojure/clojure".
         run: clojure -P
 
+      - name: Run library tests (JVM, incl. property tests)
+        run: bb test:jvm
+
       - name: Run library tests (bb)
         run: bb test:bb
 

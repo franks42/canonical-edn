@@ -47,6 +47,16 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
   `dist/cedn.cljc` includes it.
 - Tests for each fix, plus adversarial property tests (name round-trip,
   arbitrary UTF-16 strings, map key-order independence).
+- CI workflow (`.github/workflows/ci.yml`): JVM, bb and CLI tests, lint
+  and format check on pushes to `main` and on pull requests. The release
+  workflow now also runs the JVM suite before deploying to Clojars.
+
+### Fixed (test infrastructure)
+
+- `bb test:jvm` / `clj -X:test` silently ran only `jar-smoke-test`:
+  that namespace ran its tests and called `System/exit` at load time,
+  ending the JVM (exit 0) before the real suite ran. It now exits only
+  from `-main`, and the runner is restricted to `cedn.*` namespaces.
 
 ## [1.3.1] — 2026-05-04 — Release-workflow fix
 

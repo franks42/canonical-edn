@@ -195,8 +195,19 @@ them; spec text updated accordingly (see spec Appendix D).
 
     Still open from the same review: `#inst` years outside 0000–9999
     emit invalid RFC 3339; `#bytes` reader accepts odd-length/non-hex
-    input; `clj -X:test` discovers only `jar-smoke-test` (run with
-    `clj -M:test -r 'cedn.*'`) and CI runs only bb/CLI tests.
+    input.
+
+12. **JVM test suite actually runs; CI on push/PR.**
+    `test/jar_smoke_test.clj` called `(run-tests)` + `System/exit` at
+    load time.  The test runner requires every discovered namespace
+    before running any, so loading it exited the JVM — with status 0 —
+    before the suite ran: `bb test:jvm` only ever ran the 7 smoke tests
+    and could never fail on library bugs.  Fixed by moving that into
+    `-main` (how `bb test:jar` invokes it via `-m`) and restricting the
+    runner to `cedn.*` namespaces (`deps.edn` `:test` alias).  New
+    `.github/workflows/ci.yml` runs JVM + bb + CLI tests, lint and fmt
+    on pushes to main and PRs; `release.yml` now also gates the Clojars
+    deploy on `bb test:jvm`.  CLJS/nbb/Scittle are not in CI yet.
 
 ## Project Structure
 

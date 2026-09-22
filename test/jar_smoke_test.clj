@@ -72,5 +72,10 @@
           v (edn/read-string {:readers cedn/readers} s)]
       (is (= u v)))))
 
-(let [{:keys [fail error]} (run-tests)]
-  (System/exit (if (pos? (+ fail error)) 1 0)))
+;; Entry point for `bb test:jar` (`clojure ... -M -m jar-smoke-test`).
+;; Must not run at load time: the JVM test runner requires every test
+;; namespace before running any, and a load-time System/exit here ended
+;; the JVM (with status 0) before the real suite ran.
+(defn -main [& _]
+  (let [{:keys [fail error]} (run-tests 'jar-smoke-test)]
+    (System/exit (if (pos? (+ fail error)) 1 0))))

@@ -1,0 +1,50 @@
+name: ci
+
+# Runs on every push to main and on pull requests. The release
+# workflow (release.yml) repeats these checks before publishing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install bb, clj, clj-kondo, cljfmt
+        uses: DeLaGuardo/setup-clojure@13.6.0
+        with:
+          bb: 'latest'
+          cli: 'latest'
+          clj-kondo: 'latest'
+          cljfmt: 'latest'
+
+      - name: Cache Maven and gitlibs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+          key: deps-${{ runner.os }}-${{ hashFiles('deps.edn', 'bb.edn') }}
+          restore-keys: deps-${{ runner.os }}-
+
+      - name: Prefetch test deps
+        run: clojure -P -M:test
+
+      - name: Run library tests (JVM, incl. property tests)
+        run: bb test:jvm
+
+      - name: Run library tests (bb)
+        run: bb test:bb
+
+      - name: Run CLI tests (dev mode)
+        run: bb test:cli
+
+      - name: Lint
+        run: bb lint
+
+      - name: Format check
+        run: bb fmt
