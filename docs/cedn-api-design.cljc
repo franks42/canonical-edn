@@ -7,6 +7,18 @@
 ;; DOCUMENT, not runnable code — function bodies are stubs that
 ;; document contracts, arguments, and return values.
 ;;
+;; HISTORICAL (kept as the original sketch).  The shipped library
+;; has moved on; where the two differ, src/cedn/ and context.md
+;; are authoritative.  Known differences as of v1.5.0:
+;;   - :profile :cedn-r is REJECTED (:cedn/unsupported-profile),
+;;     not accepted — CEDN-R is not implemented.
+;;   - Two more internal namespaces exist: cedn.token (surrogate
+;;     and keyword/symbol name validity) and cedn.reader (strict
+;;     #inst / #uuid / #bytes readers).
+;;   - #bytes is part of CEDN-P (spec §3.14) since v1.2.0.
+;;   - Errors gained :cedn/invalid-name, :cedn/unsupported-profile,
+;;     :cedn/unknown-profile and :cedn/unsupported-runtime.
+;;
 ;; Design principles:
 ;;   1. One primary entry point: canonical-bytes
 ;;   2. Everything else is a convenience built on that

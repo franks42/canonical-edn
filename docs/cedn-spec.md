@@ -328,6 +328,14 @@ range: -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807
 (inclusive).  Values outside this range MUST cause an `out-of-range`
 error (Section 7).
 
+> **Note:**  On Clojure runtimes an integer literal beyond the 64-bit
+> range is read as a BigInt, which Section 3.17 already excludes from
+> CEDN-P.  Such a value therefore raises `unsupported-type` rather than
+> `out-of-range`; both are conformant refusals, and no implementation
+> may emit the value.  `out-of-range` remains the error for a value
+> that is of an accepted type but outside the representable range,
+> such as an `#inst` year outside 0000–9999 (Section 3.12).
+
 On ClojureScript, where all numbers are IEEE 754 doubles, a value
 is treated as an integer if and only if it satisfies
 `(and (js/Number.isFinite x) (== x (Math/trunc x)))` and falls
@@ -1669,6 +1677,7 @@ handled deterministically and injectively is unchanged.
    implementation, is now specified; the following subsections are
    renumbered (general policy 3.14→3.15, metadata 3.15→3.16,
    unsupported types 3.16→3.17).
+-  Section 3.3: note added on BigInt vs. `out-of-range`; no rule change.
 -  Section 3.12: `#inst` years are restricted to 0000–9999, the range
    RFC 3339 can express; `out-of-range` (Section 7.1) covers it.
 -  Section 3.5.4: rationale added; the rule itself is unchanged.

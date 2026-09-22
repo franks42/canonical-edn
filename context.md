@@ -108,7 +108,7 @@ design decisions, project state, and workflow notes across sessions.
 | File | What it is |
 |------|-----------|
 | `docs/cedn-spec.md` | The formal specification.  §3 (CEDN-P types) and §5 (ordering) are the critical sections. |
-| `docs/cedn-api-design.cljc` | The public API surface and module structure.  Function signatures and module dependency graph. |
+| `docs/cedn-api-design.cljc` | Original API design sketch (historical).  Where it differs from the shipped API — e.g. it still describes `:profile :cedn-r` as accepted — `src/cedn/` and this file are authoritative. |
 | `docs/cedn-p-schema.cljc` | Original Malli schema design (historical reference). |
 | `docs/kex-sources.md` | Links to reference implementations, specs, and libraries. |
 
@@ -283,6 +283,7 @@ cedn/
 │   └── cedn.cljc              ← Concatenated CEDN source for Scittle/browser (auto-generated)
 ├── .github/
 │   └── workflows/
+│       ├── ci.yml             ← push/PR: JVM matrix (21, 25) + CLJS/nbb/Scittle job
 │       └── release.yml        ← v*.*.* tag → Clojars deploy + GH Release with bin/cedn asset
 ├── context.md                  ← this file
 ├── test/
@@ -338,8 +339,11 @@ cedn/
                         :git/url "https://github.com/cognitect-labs/test-runner"}
                        org.clojure/test.check {:mvn/version "1.1.1"}
                        io.github.erdtman/java-json-canonicalization {:mvn/version "1.1"}}
-         :main-opts   ["-m" "cognitect.test-runner"]
-         :exec-fn     cognitect.test-runner.api/test}
+         ;; Only cedn.* — jar-smoke-test runs separately against the
+         ;; installed JAR (bb test:jar).
+         :main-opts   ["-m" "cognitect.test-runner" "-r" "cedn\\..*-test$"]
+         :exec-fn     cognitect.test-runner.api/test
+         :exec-args   {:patterns ["cedn\\..*-test$"]}}
   :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}
                       thheller/shadow-cljs {:mvn/version "2.28.23"}}}
   :cljs-test {:extra-paths ["test"]
@@ -371,7 +375,7 @@ ECMAScript implementation for 20,000+ doubles.
 ```clojure
 (require '[cedn.core :as cedn])
 
-cedn/version  ;=> "1.2.0"
+cedn/version  ;=> "1.5.0"
 
 ;; Canonicalize to bytes (for signing/hashing)
 (cedn/canonical-bytes {:a 1 :b 2})
@@ -388,6 +392,12 @@ cedn/version  ;=> "1.2.0"
 ;; Validate before canonicalization
 (cedn/valid? {:a 1 :b "hello"})  ;=> true
 (cedn/valid? 22/7)               ;=> false
+(cedn/valid? (symbol "nil"))     ;=> false  (would serialize as nil)
+
+;; :cedn-p is the only implemented profile; anything else throws
+;; rather than quietly producing CEDN-P bytes
+(cedn/canonical-str {:a 1} {:profile :cedn-r})
+;=> throws :cedn/unsupported-profile
 
 ;; Full diagnostics
 (cedn/inspect {:a 1 :b 2})
@@ -606,9 +616,10 @@ Browser usage (CDN):
 
 ## What's NOT Built Yet
 
-- **CEDN-R profile**: BigInt, BigDecimal, ratios.  Deprioritized indefinitely —
-  KEX/Biscuit policies require only CEDN-P types.
-- **CLI tool**: Trivial Babashka wrapper, now unblocked.
+- **CEDN-R profile**: BigInt, BigDecimal, ratios, characters.  Deprioritized
+  indefinitely — KEX/Biscuit policies require only CEDN-P types.  Since v1.5.0
+  `:cedn-r` is actively rejected (`:cedn/unsupported-profile`) rather than
+  silently treated as CEDN-P; see decision 6.
 - **Kex integration**: Separate concern. Kex depends on CEDN, not vice versa.
 - **Web Crypto SHA-256**: Browser `SubtleCrypto.digest` is async; `inspect`
   returns nil for SHA-256 on CLJS. Could wrap with async support later.
