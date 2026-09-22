@@ -405,7 +405,7 @@ clojure -T:build clean     # remove target/
 
 ```bash
 # 1. Tests (JVM) — all must pass
-clj -X:test
+clojure -X:test
 
 # 2. Tests (Babashka) — all must pass
 bb -cp src:test -e '

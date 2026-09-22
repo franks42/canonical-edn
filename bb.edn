@@ -1,8 +1,9 @@
 {:paths ["src" "test"]
  :deps {}
  :tasks
- {test:jvm  {:doc  "Run JVM tests (clj -X:test)"
-             :task (shell "clj" "-X:test")}
+ {test:jvm  {:doc  "Run JVM tests (clojure -X:test)"
+             ;; `clojure`, not `clj`: the rlwrap wrapper is not on CI runners
+             :task (shell "clojure" "-X:test")}
 
   test:bb   {:doc  "Run Babashka tests"
              :task (do (require 'clojure.test
