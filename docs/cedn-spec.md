@@ -425,6 +425,12 @@ implementations are available:
 
 Both implement the ECMAScript Number serialization algorithm.
 
+Alternatively, `Double.toString` output may be reformatted into
+ECMAScript form, but ONLY on JDK 19 or newer: before JDK 19,
+`Double.toString` was not guaranteed to produce the shortest
+round-tripping decimal (JDK-4511638), so reformatting its output
+yields extra digits for some values and diverges from JavaScript.
+
 The JVM formatter MUST then apply the EDN-specific `.0` suffix
 rule and the `-0.0` normalization.
 

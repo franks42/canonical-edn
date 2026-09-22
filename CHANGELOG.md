@@ -51,6 +51,14 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
   and format check on pushes to `main` and on pull requests. The release
   workflow now also runs the JVM suite before deploying to Clojars.
 
+### Changed
+
+- Documented that the JVM build requires **JDK 19 or newer**
+  (`Double/toString` is only guaranteed shortest-round-trip from JDK 19,
+  JDK-4511638). On JDK 17 cedn emits extra digits for some doubles and
+  diverges from the JS platforms; the reference vectors in
+  `test/cedn/number-reference.edn` catch it. CI pins Temurin 21 and 25.
+
 ### Fixed (test infrastructure)
 
 - `bb test:jvm` / `clj -X:test` silently ran only `jar-smoke-test`:

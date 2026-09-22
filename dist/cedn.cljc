@@ -179,7 +179,13 @@
   with EDN .0 suffix adaptation.
 
   On JVM/Babashka: pure Clojure reformatter post-processes Double/toString
-  (JDK 17+ Schubfach) into ECMAScript format, then applies .0 suffix rule.
+  (JDK 19+ Schubfach) into ECMAScript format, then applies .0 suffix rule.
+
+  REQUIRES JDK 19 or newer.  Double/toString only became guaranteed
+  shortest-round-trip in JDK 19 (JDK-4511638); on older JDKs it can
+  emit extra digits (e.g. -36897728365593032.0 where JS and JDK 19+
+  give -36897728365593030.0), so canonical bytes would diverge from
+  every other platform.  test/cedn/number-reference.edn catches this.
 
   On JS: trivial — Number.prototype.toString() IS the spec."
   (:require [cedn.error :as err]
@@ -187,7 +193,7 @@
 
 #?(:clj
    (defn- ecma-reformat
-     "Reformat Double/toString output (JDK 17+ Schubfach) into
+     "Reformat Double/toString output (JDK 19+ Schubfach) into
   ECMAScript Number::toString format per ECMA-262 §7.1.12.1.
 
   Differences handled:

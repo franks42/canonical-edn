@@ -294,7 +294,11 @@ cedn/
 
 The only production dependency is Clojure itself.  Double formatting
 uses a pure Clojure `ecma-reformat` that post-processes `Double/toString`
-(JDK 17+ Schubfach algorithm) into ECMAScript Number::toString format.
+(JDK 19+ Schubfach algorithm) into ECMAScript Number::toString format.
+**JDK 19+ is required**: `Double/toString` only became guaranteed
+shortest-round-trip in JDK 19 (JDK-4511638).  On JDK 17 or older, cedn
+emits extra digits for some doubles and diverges from every other
+platform — CI pins Temurin 21/25 and `number-reference.edn` catches it.
 The `java-json-canonicalization` library (JCS) is a **test-only**
 dependency used to cross-validate `ecma-reformat` against the reference
 ECMAScript implementation for 20,000+ doubles.

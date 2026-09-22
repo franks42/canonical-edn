@@ -28,6 +28,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Install JDK 21
+        # JDK 19+ required — see .github/workflows/ci.yml
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Install bb, clj, clj-kondo, cljfmt
         uses: DeLaGuardo/setup-clojure@13.6.0
         with:

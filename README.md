@@ -17,6 +17,14 @@ Same logical value produces the same bytes, always, on every Clojure platform.
 
 Zero production dependencies beyond Clojure itself.
 
+**On the JVM, cedn requires JDK 19 or newer.** `Double/toString` only
+became guaranteed shortest-round-trip in JDK 19 ([JDK-4511638]); on
+older JDKs cedn emits extra digits for some doubles, so its bytes would
+not match those produced on JavaScript, Babashka or nbb. Babashka and
+the JS runtimes are unaffected.
+
+[JDK-4511638]: https://bugs.openjdk.org/browse/JDK-4511638
+
 ## Installation
 
 ### deps.edn
