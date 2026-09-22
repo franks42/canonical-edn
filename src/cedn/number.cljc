@@ -86,6 +86,28 @@
              (str sign-prefix (subs digits 0 1) "." (subs digits 1)
                   "e" e-sign e-str)))))))
 
+#?(:clj
+   ;; Fail fast at load time rather than emit bytes that silently differ
+   ;; from every other platform.  Probes the actual defect instead of
+   ;; comparing version strings, so a runtime whose reported java.version
+   ;; does not match its formatter (e.g. a Babashka native image) is
+   ;; judged on behaviour.  On JDK 19+ this is "3.689772836559303E16";
+   ;; before JDK 19, Double/toString returns a longer, non-shortest form.
+   (let [actual (Double/toString 3.6897728365593032E16)]
+     (when-not (= "3.689772836559303E16" actual)
+       (throw (ex-info
+               (str "cedn requires JDK 19 or newer. This JVM ("
+                    (System/getProperty "java.version")
+                    ") does not produce shortest round-trip doubles: "
+                    "Double/toString gave " actual
+                    " instead of 3.689772836559303E16 (JDK-4511638). "
+                    "Canonical bytes from this JVM would differ from "
+                    "JavaScript, Babashka and nbb, so cedn refuses to load.")
+               {:cedn/error       :cedn/unsupported-runtime
+                :cedn/java-version (System/getProperty "java.version")
+                :cedn/expected    "3.689772836559303E16"
+                :cedn/actual      actual})))))
+
 (defn format-double
   "Format a double to its canonical string representation.
 

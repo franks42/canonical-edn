@@ -100,3 +100,12 @@
                          (str "Mismatch for " d
                               ": JCS=" jcs-result
                               " reformat=" reformat-result))))))))))))
+
+#?(:clj
+   (deftest jdk-shortest-double-guard-test
+     (testing "the JDK 19+ probe cedn.number asserts at load time"
+       ;; If this fails, the running JVM predates JDK 19 (JDK-4511638) and
+       ;; cedn.number refuses to load — canonical bytes would differ from
+       ;; JavaScript, Babashka and nbb.
+       (is (= "3.689772836559303E16" (Double/toString 3.6897728365593032E16)))
+       (is (= "36897728365593030.0" (number/format-double 3.6897728365593032E16))))))

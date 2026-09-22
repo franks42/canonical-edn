@@ -53,6 +53,12 @@ See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
 
 ### Changed
 
+- **cedn now refuses to load on a JVM older than JDK 19.** `cedn.number`
+  probes `Double/toString` at load time and throws
+  `:cedn/unsupported-runtime` if the JVM does not produce shortest
+  round-trip doubles. Silently emitting bytes that no other platform
+  reproduces is worse than failing to start. The check tests the actual
+  behaviour rather than the reported version string.
 - Documented that the JVM build requires **JDK 19 or newer**
   (`Double/toString` is only guaranteed shortest-round-trip from JDK 19,
   JDK-4511638). On JDK 17 cedn emits extra digits for some doubles and

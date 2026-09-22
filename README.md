@@ -3,6 +3,16 @@
 Deterministic serialization of EDN values to UTF-8 byte sequences.
 Same logical value produces the same bytes, always, on every Clojure platform.
 
+> **Requires JDK 19 or newer on the JVM.** `Double/toString` only became
+> guaranteed shortest-round-trip in JDK 19 ([JDK-4511638]); on JDK 17 and
+> older, cedn would emit extra digits for some doubles, so its bytes would
+> not match those produced on JavaScript, Babashka or nbb — and signatures
+> would not verify across platforms. Rather than fail silently, **cedn
+> throws on load** on an unsupported JVM. Babashka, nbb, ClojureScript and
+> Scittle are unaffected.
+
+[JDK-4511638]: https://bugs.openjdk.org/browse/JDK-4511638
+
 **Why?** EDN maps and sets have no defined order, so `(pr-str {:b 2 :a 1})` can produce `"{:b 2, :a 1}"` or `"{:a 1, :b 2}"` depending on the runtime. This breaks cryptographic signing — you can't verify a signature if the serializer reorders keys. CEDN defines a canonical form with deterministic key ordering, so `(canonical-bytes value)` is stable across JVM, ClojureScript, Babashka, nbb, and browser.
 
 ```clojure
@@ -16,14 +26,6 @@ Same logical value produces the same bytes, always, on every Clojure platform.
 ```
 
 Zero production dependencies beyond Clojure itself.
-
-**On the JVM, cedn requires JDK 19 or newer.** `Double/toString` only
-became guaranteed shortest-round-trip in JDK 19 ([JDK-4511638]); on
-older JDKs cedn emits extra digits for some doubles, so its bytes would
-not match those produced on JavaScript, Babashka or nbb. Babashka and
-the JS runtimes are unaffected.
-
-[JDK-4511638]: https://bugs.openjdk.org/browse/JDK-4511638
 
 ## Installation
 

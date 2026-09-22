@@ -299,6 +299,11 @@ uses a pure Clojure `ecma-reformat` that post-processes `Double/toString`
 shortest-round-trip in JDK 19 (JDK-4511638).  On JDK 17 or older, cedn
 emits extra digits for some doubles and diverges from every other
 platform — CI pins Temurin 21/25 and `number-reference.edn` catches it.
+`cedn.number` therefore probes `Double/toString` at load time and throws
+`:cedn/unsupported-runtime` on an older JVM: a hard failure at load is
+better than canonical bytes that silently do not match other platforms.
+The probe tests behaviour, not `java.version`, so a runtime whose
+reported version does not match its formatter is judged correctly.
 The `java-json-canonicalization` library (JCS) is a **test-only**
 dependency used to cross-validate `ecma-reformat` against the reference
 ECMAScript implementation for 20,000+ doubles.
