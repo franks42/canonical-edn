@@ -32,11 +32,14 @@ Zero production dependencies beyond Clojure itself.
 This is the property the whole library rests on.
 
 A value has endlessly many EDN spellings. `edn-1`, `edn-2`, … `edn-n`
-differ in key order, whitespace, commas, comments, map type, metadata,
-`1.50` vs `1.5`, `-0.0` vs `0.0`, uppercase vs lowercase in `#uuid` and
-`#bytes`, `#inst "2020-01-01"` vs `#inst "2020-01-01T01:00:00+01:00"`.
-They all carry the same information, so they all canonicalize to one
-representative, `cedn-0`:
+differ in whitespace and indentation, key order in maps, element order
+in sets, commas, comments and `#_` discards, map type (array/hash/sorted),
+records vs plain maps, metadata, number spelling (`1.50`, `1.5000`,
+`-0.0`), case in `#uuid` and `#bytes`, and timezone in `#inst`
+(`2020-01-01T00:00:00Z`, `2020-01-01`, `2020-01-01T09:00:00+09:00`,
+`2019-12-31T19:00:00-05:00` are all the same instant). They carry the
+same information, so they all canonicalize to one representative,
+`cedn-0`:
 
 ```
   edn-1  ┐
@@ -58,16 +61,39 @@ That is what makes `cedn` an *idempotent projection* (spec §1.2.3):
 `cedn ∘ cedn = cedn`. Running the pipeline twice, or ten times, changes
 nothing after the first pass.
 
+Four inputs that share no byte-level resemblance — different key order,
+set order, commas, comments, a discard, metadata, `1.50` vs `1.5000`,
+mixed-case UUIDs, and the same instant written in UTC, as a bare date,
+in Tokyo and in New York:
+
+```clojure
+{:b 2 :a 1 :s #{2 1} :d 1.50
+ :t #inst "2020-01-01T00:00:00Z"
+ :u #uuid "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6"}
+
+{:a 1, :b 2, :d 1.5, :s #{1 2},
+ :t #inst "2020-01-01",
+ :u #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"}
+
+{:s #{1 2}   ; Tokyo offset, same instant
+ :t #inst "2020-01-01T09:00:00+09:00" :b 2 :a 1 :d 1.5000
+ :u #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6" #_ :dropped}
+
+^{:meta "gone"} {:a 1 :b 2 :d 1.5 :s #{2 1}
+                 :t #inst "2019-12-31T19:00:00-05:00"
+                 :u #uuid "F81d4fAE-7dEC-11d0-A765-00a0C91E6bF6"}
+```
+
+All four canonicalize to the same text, and so hash to the same digest
+(`963d50b968a2b944…`):
+
+```
+{:a 1 :b 2 :d 1.5 :s #{1 2} :t #inst "2020-01-01T00:00:00.000000000Z" :u #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"}
+```
+
 ```bash
-$ printf '{:b 2 :a 1 :s #{2 1}}'                       | cedn   # key order, set order
-$ printf '{:a 1, :b 2, :s #{1 2}}'                     | cedn   # commas
-$ printf '{:s #{1 2} ; comment\n :b 2 :a 1 #_ :dropped}' | cedn   # comments, discard
-$ printf '^{:meta "gone"} {:a 1 :b 2 :s #{2 1}}'       | cedn   # metadata
-
-{:a 1 :b 2 :s #{1 2}}      # …all four print this, and all four hash to
-                           # 9222263d2dd409ded3bd7909…
-
-$ printf '{:a 1 :b 2 :s #{1 2}}' | cedn | cedn | cedn   # same bytes, same hash
+$ cat any-of-them.edn | cedn | sha256sum          # one digest for all four
+$ cat any-of-them.edn | cedn | cedn | cedn        # identical to one pass
 ```
 
 The first pass burns off everything that is presentation rather than
