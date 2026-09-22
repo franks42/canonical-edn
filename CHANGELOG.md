@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `cedn.gen/gen-uuid` draws from a new fixed `cedn.gen/uuid-pool` instead
+  of calling `randomUUID`. A generator that is not a pure function of the
+  seed cannot be replayed from a reported seed and cannot shrink, so a
+  failing case was unreproducible. The pool leads with the nil, max and
+  signed-64-bit-boundary UUIDs, so shrinking lands on an edge case. Tests
+  elsewhere use fixed UUID literals.
+- CI now also runs ClojureScript (shadow-cljs), nbb, the nbb
+  git-dependency path and the Scittle browser tests, and both CI and the
+  release workflow fail if `dist/cedn.cljc` is stale relative to `src/`.
+
 (Active dev cycle. Bump the `version` constants in `bin/cedn`,
 `src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
 `release.yml` refuses to release otherwise — before tagging the next

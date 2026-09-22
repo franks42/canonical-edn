@@ -121,8 +121,7 @@
     (is (neg? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
                           #?(:clj (java.util.Date.) :cljs (js/Date.)))))
     (is (neg? (order/rank #?(:clj (byte-array [1]) :cljs (js/Uint8Array. #js [1]))
-                          #?(:clj (java.util.UUID/randomUUID)
-                             :cljs (random-uuid)))))))
+                          #uuid "29558297-e4b8-47af-bf3d-84942b5b40b8")))))
 
 (deftest cross-type-ordering-test
   (testing "Appendix C.3: mixed-type set ordering"

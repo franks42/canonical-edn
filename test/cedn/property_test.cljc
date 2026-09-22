@@ -144,3 +144,9 @@
                 (let [as-map (fn [xs] (apply array-map (mapcat (fn [k] [k k]) xs)))]
                   (= (outcome (as-map ks))
                      (outcome (as-map (reverse ks)))))))
+
+;; Property 8: UUID generation is seed-derived — every value comes from
+;; the fixed pool, so a reported seed replays and shrinking works.
+(defspec uuids-come-from-the-fixed-pool num-tests
+  (prop/for-all [u cgen/gen-uuid]
+                (contains? (set cgen/uuid-pool) u)))

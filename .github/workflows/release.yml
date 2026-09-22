@@ -95,6 +95,12 @@ jobs:
       - name: Run CLI tests (dev mode)
         run: bb test:cli
 
+      - name: Check dist/cedn.cljc is up to date
+        run: |
+          bb build:scittle
+          git diff --exit-code -- dist/cedn.cljc \
+            || { echo "::error::dist/cedn.cljc is stale — run 'bb build:scittle' and commit"; exit 1; }
+
       - name: Lint
         run: bb lint
 

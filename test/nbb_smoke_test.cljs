@@ -58,7 +58,7 @@
 
 (deftest readers-round-trip-test
   (testing "#uuid round-trip"
-    (let [u (random-uuid)
+    (let [u #uuid "29558297-e4b8-47af-bf3d-84942b5b40b8"
           s (cedn/canonical-str u)
           v (reader/read-string s)]
       (is (= u v)))))

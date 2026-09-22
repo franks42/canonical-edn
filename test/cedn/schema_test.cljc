@@ -1,7 +1,7 @@
 (ns cedn.schema-test
   (:require [clojure.test :refer [deftest is are testing]]
             [cedn.schema :as schema])
-  #?(:clj (:import [java.util Date UUID]
+  #?(:clj (:import [java.util Date]
                    [java.time Instant])))
 
 (deftest valid-scalars-test
@@ -44,7 +44,7 @@
      (testing "inst and uuid"
        (is (schema/valid? :cedn-p (Date.)))
        (is (schema/valid? :cedn-p (Instant/now)))
-       (is (schema/valid? :cedn-p (UUID/randomUUID))))))
+       (is (schema/valid? :cedn-p #uuid "29558297-e4b8-47af-bf3d-84942b5b40b8")))))
 
 (deftest valid-bytes-test
   (testing "byte arrays are valid"
