@@ -49,7 +49,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 {:deps {com.github.franks42/cedn
         {:git/url "https://github.com/franks42/canonical-edn"
          :git/tag "v1.4.0"
-         :git/sha "03fe8e3"}}}
+         :git/sha "d9763e4"}}}
 ```
 
 ### Scittle (Browser)
