@@ -42,6 +42,31 @@
                  (aset arr i (js/parseInt (digits i) 16)))
                arr))))
 
+;; --- #uuid ---
+
+(def ^:private uuid-pattern
+  #"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+#?(:cljs
+   (def ^:private uuid-ctor
+     ;; Scittle's sci runtime exposes neither cljs.core/uuid nor the UUID
+     ;; constructor, but it does have random-uuid — so take the
+     ;; constructor from an instance and build UUIDs through it.
+     (.-constructor (random-uuid))))
+
+(defn parse-uuid*
+  "Parse a UUID string in canonical 8-4-4-4-12 form.
+
+  java.util.UUID/fromString accepts sloppy input such as \"1-2-3-4-5\"
+  and cljs.core/uuid accepts anything at all; both would read a value
+  that is not what the text says (spec §3.13)."
+  [s]
+  (when-not (and (string? s) (re-matches uuid-pattern s))
+    (err/reader-error! "uuid" s "not a 8-4-4-4-12 hex UUID"))
+  #?(:clj  (java.util.UUID/fromString s)
+     ;; lowercased to match canonical form, as cljs.core/uuid does
+     :cljs (js/Reflect.construct uuid-ctor #js [(.toLowerCase s) nil])))
+
 ;; --- #inst ---
 
 ;; The EDN timestamp grammar: yyyy, yyyy-MM, yyyy-MM-dd, with optional

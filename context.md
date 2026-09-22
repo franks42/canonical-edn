@@ -13,9 +13,20 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.4.0 — determinism, injectivity and strict readers. Canonical output changes for inputs that hit the fixed bugs; some previously-accepted inputs are now rejected. Requires JDK 19+ on the JVM.**
+**v1.5.0 — profile enforcement, strict `#uuid`, CLI I/O correctness. Builds on v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
+
+### v1.5.0 — profile enforcement and remaining review items
+
+`:cedn-r` and unknown profiles are rejected instead of silently emitting
+CEDN-P (decision 6).  The `#uuid` reader requires canonical 8-4-4-4-12
+form, completing the strict-reader work.  `bin/cedn` no longer reports
+success after a failed write, and `-o` is no longer an alias for
+`--objects`.  `bb gen:compliance` actually writes the golden vectors
+file, rank-ordered and free of raw control bytes, and re-verifies it.
+`cedn.gen` now generates strings with escapes/control characters/astral
+pairs, namespaced names, and nanosecond insts, plus `gen-bytes`.
 
 ### v1.4.0 — canonicalization fixes (decisions 7–13)
 
@@ -70,7 +81,7 @@ The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.4.0"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.5.0"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |

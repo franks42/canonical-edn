@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+(Active dev cycle. Bump the `version` constants in `bin/cedn`,
+`src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
+`release.yml` refuses to release otherwise — before tagging the next
+release.)
+
+## [1.5.0] — 2026-09-22 — Profile enforcement, strict `#uuid`, CLI I/O
+
+**Breaking:** `:profile :cedn-r` and unknown profiles now throw instead
+of silently producing CEDN-P bytes; the CLI's `-o` is no longer an alias
+for `--objects`; and the `#uuid` reader requires canonical 8-4-4-4-12
+form.
+
 ### Fixed
 
 - **Profiles are no longer accepted and ignored.** `canonical-str`,
@@ -18,8 +30,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   anything else throws `:cedn/unknown-profile`. `inspect` keeps its
   never-throws contract and reports the error in `:errors`.
 
+### Fixed (continued)
+
+- The `#uuid` reader accepted sloppy input: `java.util.UUID/fromString`
+  reads `#uuid "1-2-3-4-5"` as a padded UUID and `cljs.core/uuid` accepts
+  any string at all, so the value read differed from the text. Both
+  platforms now require canonical 8-4-4-4-12 hex (uppercase accepted,
+  lowercased on read) and throw `:cedn/invalid-tag-form` otherwise.
+- `bin/cedn` treated every `IOException` as a closed downstream pipe and
+  exited 0, so a failed write to `--output` looked like success. Only a
+  broken pipe is silent now; other I/O errors print and exit 1, as
+  `--help` always claimed.
+- `bb gen:compliance` printed "Writing golden file…" and wrote nothing.
+  It now writes `test/cedn/cedn-p-compliance-vectors.edn`, ordering map
+  and set contents by rank and escaping control characters so the file is
+  stable and contains no invisible bytes, then re-reads and re-verifies
+  it. Byte-identical output on repeated runs.
+
 ### Changed
 
+- **CLI:** `-o` is no longer an alias for `--objects`; write `--objects`
+  in full. It is not reassigned to `--output` — that would silently write
+  to a file named like the next argument — so `-o` now fails with a
+  usage error (exit 2) explaining the change.
+- `cedn.gen` generates values that actually exercise the rules: strings
+  with escapes, control characters, non-ASCII and astral-plane pairs;
+  namespaced keywords and symbols; and nanosecond-precision `Instant`s
+  on the JVM. New `cedn.gen/gen-bytes`; byte arrays stay out of
+  `gen-cedn-p` because two arrays with the same content are not `=` and
+  would land in one set as a canonical duplicate.
 - `cedn.gen/gen-uuid` draws from a new fixed `cedn.gen/uuid-pool` instead
   of calling `randomUUID`. A generator that is not a pure function of the
   seed cannot be replayed from a reported seed and cannot shrink, so a

@@ -1086,6 +1086,31 @@
                  (aset arr i (js/parseInt (digits i) 16)))
                arr))))
 
+;; --- #uuid ---
+
+(def ^:private uuid-pattern
+  #"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
+
+#?(:cljs
+   (def ^:private uuid-ctor
+     ;; Scittle's sci runtime exposes neither cljs.core/uuid nor the UUID
+     ;; constructor, but it does have random-uuid — so take the
+     ;; constructor from an instance and build UUIDs through it.
+     (.-constructor (random-uuid))))
+
+(defn parse-uuid*
+  "Parse a UUID string in canonical 8-4-4-4-12 form.
+
+  java.util.UUID/fromString accepts sloppy input such as \"1-2-3-4-5\"
+  and cljs.core/uuid accepts anything at all; both would read a value
+  that is not what the text says (spec §3.13)."
+  [s]
+  (when-not (and (string? s) (re-matches uuid-pattern s))
+    (err/reader-error! "uuid" s "not a 8-4-4-4-12 hex UUID"))
+  #?(:clj  (java.util.UUID/fromString s)
+     ;; lowercased to match canonical form, as cljs.core/uuid does
+     :cljs (js/Reflect.construct uuid-ctor #js [(.toLowerCase s) nil])))
+
 ;; --- #inst ---
 
 ;; The EDN timestamp grammar: yyyy, yyyy-MM, yyyy-MM-dd, with optional
@@ -1180,10 +1205,9 @@
             [cedn.reader :as reader]
             [cedn.schema :as schema]
             [clojure.edn :as edn])
-  #?(:clj (:import [java.security MessageDigest]
-                   [java.util UUID])))
+  #?(:clj (:import [java.security MessageDigest])))
 
-(def version "1.4.0")
+(def version "1.5.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -1316,14 +1340,12 @@
 
   #inst yields java.time.Instant (nanosecond precision) on the JVM and
   js/Date on JS; the full EDN timestamp grammar is accepted and parsed
-  identically on every platform.  #bytes requires an even-length hex
-  string.  Malformed input throws rather than reading a partial value."
-  #?(:clj  {'inst  reader/parse-inst
-            'uuid  #(UUID/fromString %)
-            'bytes reader/hex->bytes}
-     ;; CLJS: built-in #uuid reader already produces cljs.core/UUID.
-     :cljs {'inst  reader/parse-inst
-            'bytes reader/hex->bytes}))
+  identically on every platform.  #uuid requires canonical 8-4-4-4-12
+  form and #bytes an even-length hex string.  Malformed input throws
+  rather than reading a partial or different value."
+  {'inst  reader/parse-inst
+   'uuid  reader/parse-uuid*
+   'bytes reader/hex->bytes})
 
 (defn canonical?
   "Given an EDN string, returns true if it is already in canonical form."

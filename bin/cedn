@@ -32,7 +32,7 @@
 
 ;; Single source of truth for both --version output and the Maven
 ;; coord we resolve from Clojars. Bumped at release time.
-(def version "1.4.0")
+(def version "1.5.0")
 
 ;; Dev vs release source resolution.
 (let [script-file (java.io.File. (System/getProperty "babashka.file"))
@@ -50,7 +50,7 @@
 ;; ----- argument parsing -----
 
 (def cli-spec
-  {:objects {:alias :o :coerce :boolean
+  {:objects {:coerce :boolean
              :desc "Concatenate forms with single-space separator (no trailing newline)"}
    :input   {:alias :i :coerce :string
              :desc "Read EDN from file instead of stdin"}
@@ -76,7 +76,7 @@ OPTIONS:
     --output <file>       Write to file instead of stdout.
     --edn <string>        Read EDN from this argument (mutually exclusive
                           with --input; ignores stdin).
-    -o, --objects         Concatenate forms with single-space separator,
+    --objects             Concatenate forms with single-space separator,
                           no trailing newline. Default is newline-separated
                           with trailing newline.
     -h, --help            Display this help text and exit.
@@ -85,6 +85,7 @@ OPTIONS:
 EXIT CODES:
     0  success
     1  malformed EDN, EDN containing types cedn rejects, or I/O error
+       (a closed downstream pipe is not an error: cedn exits 0)
     2  usage error (bad/conflicting flags)
 
 EXAMPLES:
@@ -138,6 +139,13 @@ EXAMPLES:
 
 ;; ----- core filter -----
 
+;; A consumer closing the pipe (`cedn | head`) surfaces as an IOException
+;; whose message is "Broken pipe"; anything else — a full disk, an
+;; unwritable --output file — is a real error and must not exit 0.
+(defn broken-pipe? [^java.io.IOException e]
+  (let [m (.getMessage e)]
+    (and m (re-find #"(?i)broken pipe" m))))
+
 (defn emit-forms! [reader ^java.io.OutputStream out objects?]
   (let [sep-bytes (.getBytes ^String (if objects? " " "\n") "UTF-8")]
     (try
@@ -156,10 +164,17 @@ EXAMPLES:
                     (.write out sep-bytes)))
               (.flush out))
             (recur false))))
-      ;; EPIPE on downstream consumer close — exit cleanly with no error.
-      (catch java.io.IOException _ nil))))
+      (catch java.io.IOException e
+        (when-not (broken-pipe? e)
+          (die 1 "I/O error:" (.getMessage e)))))))
 
 ;; ----- main -----
+
+;; -o used to mean --objects. It is not reassigned to --output, because
+;; a silent change of meaning there would write to a file named like the
+;; next argument. Fail loudly instead.
+(when (some #{"-o"} *command-line-args*)
+  (die-usage "-o is no longer an alias for --objects; write --objects in full"))
 
 (let [opts (try (cli/parse-opts *command-line-args*
                                 {:spec cli-spec :restrict true})

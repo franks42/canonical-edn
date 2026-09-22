@@ -112,3 +112,29 @@
                :cljs "#inst \"2020-06-15T12:34:56.123000000Z\"")]
       (is (cedn/canonical? s))
       (is (= s (cedn/canonical-str (edn/read-string {:readers cedn/readers} s)))))))
+
+;; --- #uuid reader (§3.13) ---
+
+(deftest parse-uuid-test
+  (testing "canonical form reads"
+    (is (= "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""
+           (cedn/canonical-str (reader/parse-uuid* "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")))))
+  (testing "uppercase reads and canonicalizes to lowercase"
+    (is (= (reader/parse-uuid* "f81d4fae-7dec-11d0-a765-00a0c91e6bf6")
+           (reader/parse-uuid* "F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6"))))
+  (testing "sloppy forms are rejected"
+    ;; UUID/fromString would pad "1-2-3-4-5"; cljs.core/uuid takes anything
+    (are [s] (= :cedn/invalid-tag-form
+                (:cedn/error (error-data #(reader/parse-uuid* s))))
+      "1-2-3-4-5"
+      "f81d4fae7dec11d0a76500a0c91e6bf6"
+      "f81d4fae-7dec-11d0-a765-00a0c91e6bf"
+      "f81d4fae-7dec-11d0-a765-00a0c91e6bfgg"
+      "not-a-uuid"
+      ""))
+  (testing "through the readers map"
+    (is (= :cedn/invalid-tag-form
+           (:cedn/error (error-data #(edn/read-string {:readers cedn/readers}
+                                                      "#uuid \"1-2-3-4-5\"")))))
+    (is (cedn/canonical? "#uuid \"f81d4fae-7dec-11d0-a765-00a0c91e6bf6\""))
+    (is (not (cedn/canonical? "#uuid \"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\"")))))

@@ -13,8 +13,10 @@
 ;; Property 1: Idempotency — canonical text is stable across roundtrips
 (defspec canonical-idempotent num-tests
   (prop/for-all [v (cgen/gen-cedn-p {:max-size 3})]
+                ;; cedn/readers, not the default reader: #inst must come
+                ;; back at full precision to re-canonicalize identically.
                 (let [s1 (cedn/canonical-str v)
-                      v2 (edn/read-string s1)
+                      v2 (edn/read-string {:readers cedn/readers} s1)
                       s2 (cedn/canonical-str v2)]
                   (= s1 s2))))
 
@@ -150,3 +152,13 @@
 (defspec uuids-come-from-the-fixed-pool num-tests
   (prop/for-all [u cgen/gen-uuid]
                 (contains? (set cgen/uuid-pool) u)))
+
+;; Property 9: byte arrays canonicalize and round-trip wherever they
+;; appear (kept out of gen-cedn-p — see cedn.gen/gen-bytes).
+(defspec bytes-round-trip num-tests
+  (prop/for-all [bs (gen/vector cgen/gen-bytes 0 4)
+                 k  (gen/elements [:a :b])]
+                (let [v  {k (vec bs)}
+                      s1 (cedn/canonical-str v)
+                      v2 (edn/read-string {:readers cedn/readers} s1)]
+                  (= s1 (cedn/canonical-str v2)))))

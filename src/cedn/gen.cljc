@@ -18,17 +18,30 @@
 
 #?(:clj
    (def gen-inst
-     "Generator for java.util.Date values."
+     "Generator for java.time.Instant values, including sub-millisecond
+  ones.  Instants (not Dates) so that two generated values are equal
+  exactly when they are the same moment: a Date and an Instant for one
+  moment are not (=) but canonicalize identically, which is a duplicate
+  inside a generated set.  Use gen-date for the Date type."
      (gen/fmap
-      (fn [ms] (Date. ^long ms))
-      (gen/choose 0 4102444800000)))
+      (fn [[ms nanos]] (.plusNanos (java.time.Instant/ofEpochMilli ms) nanos))
+      (gen/tuple (gen/choose 0 4102444800000)
+                 (gen/choose 0 999999))))
 
    :cljs
    (def gen-inst
-     "Generator for js/Date values."
+     "Generator for js/Date values (millisecond resolution)."
      (gen/fmap
       (fn [ms] (js/Date. ms))
       (gen/choose 0 4102444800000))))
+
+#?(:clj
+   (def gen-date
+     "Generator for java.util.Date values (millisecond resolution)."
+     (gen/fmap (fn [ms] (Date. ^long ms)) (gen/choose 0 4102444800000)))
+
+   :cljs
+   (def gen-date gen-inst))
 
 (def uuid-pool
   "A fixed pool of UUIDs for generation.
@@ -72,6 +85,33 @@
     (gen/fmap char (gen/choose 97 122))
     gen/string-alphanumeric)))
 
+(def ^:private interesting-chars
+  ;; Characters that exercise the escaping rules (§3.5) and the
+  ;; codepoint-ordering rules (§5.3.4): the mandatory escapes, control
+  ;; characters, U+007F, non-ASCII, and astral-plane pairs.
+  ["\"" "\\" "\n" "\r" "\t" "\u0000" "\u0001" "\u001f" "\u007f"
+   " " "a" "Z" "0" "~" "\u00e9" "\u00df" "\u4e2d" "\uffff"
+   "\ud83d\ude00" "\ud800\udc00"])
+
+(def gen-string
+  "Generator for CEDN-P strings: escapes, control characters, non-ASCII
+  and astral-plane pairs, never an unpaired surrogate."
+  (gen/one-of
+   [gen/string-alphanumeric
+    (gen/fmap #(apply str %)
+              (gen/vector (gen/elements interesting-chars) 0 6))]))
+
+(def gen-bytes
+  "Generator for byte arrays (byte[] / js/Uint8Array).
+
+  Deliberately not part of gen-cedn-p: two byte arrays with the same
+  content are not (=), so a generated set could hold both, and they
+  canonicalize identically — a duplicate-element error rather than a
+  useful test case."
+  (gen/fmap #?(:clj  (fn [xs] (byte-array (map unchecked-byte xs)))
+               :cljs (fn [xs] (js/Uint8Array. (clj->js xs))))
+            (gen/vector (gen/choose 0 255) 0 8)))
+
 (def gen-cedn-p-leaf
   "Generator for CEDN-P leaf values."
   (gen/one-of
@@ -81,9 +121,12 @@
     (gen/large-integer* {:min #?(:clj -9223372036854775808 :cljs -9007199254740991)
                          :max #?(:clj  9223372036854775807 :cljs  9007199254740991)})
     gen-finite-double
-    gen/string-alphanumeric
+    gen-string
     (gen/fmap keyword gen-edn-name)
     (gen/fmap symbol gen-edn-name)
+    ;; namespaced keywords/symbols exercise the namespace ordering rules
+    (gen/fmap (fn [[ns n]] (keyword ns n)) (gen/tuple gen-edn-name gen-edn-name))
+    (gen/fmap (fn [[ns n]] (symbol ns n)) (gen/tuple gen-edn-name gen-edn-name))
     gen-inst
     gen-uuid]))
 
@@ -107,7 +150,7 @@
           [(gen/return nil)
            gen/boolean
            (gen/large-integer* {:min -1000 :max 1000})
-           gen/string-alphanumeric
+           gen-string
            (gen/fmap keyword gen-edn-name)
            (gen/fmap symbol gen-edn-name)])
          inner

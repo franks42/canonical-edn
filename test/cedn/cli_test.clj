@@ -130,3 +130,39 @@
 (deftest missing-flag-value-exits-2
   (let [{:keys [exit]} (run ["--input"])]
     (is (= 2 exit))))
+
+;; ----- I/O errors and flag changes -----
+
+(deftest objects-flag-long-form-only
+  (testing "--objects works"
+    (let [{:keys [exit out]} (run ["--objects" "--edn" "{:b 2 :a 1} [3 1]"])]
+      (is (= 0 exit))
+      (is (= "{:a 1 :b 2} [3 1]" out))))
+  (testing "-o is rejected loudly, never silently reinterpreted"
+    ;; -o used to mean --objects; it is not reassigned to --output,
+    ;; which would write to a file named like the next argument.
+    (let [{:keys [exit err]} (run ["-o" "--edn" "{:a 1}"])]
+      (is (= 2 exit))
+      (is (str/includes? err "-o is no longer an alias")))))
+
+(deftest write-error-is-reported
+  (testing "an unwritable --output exits 1, not 0"
+    (let [{:keys [exit err]} (run ["--edn" "{:a 1}" "--output" "/nonexistent-dir/out.edn"])]
+      (is (= 1 exit))
+      (is (str/includes? err "could not open output file"))))
+  (testing "a directory as --output exits 1"
+    (let [{:keys [exit]} (run ["--edn" "{:a 1}" "--output"
+                               (System/getProperty "java.io.tmpdir")])]
+      (is (= 1 exit)))))
+
+(deftest closed-downstream-pipe-is-not-an-error
+  (testing "cedn | head exits 0 with no error output"
+    ;; Only a broken pipe is swallowed; other IOExceptions exit 1.
+    (let [err-file (doto (java.io.File/createTempFile "cedn-pipe" ".err")
+                     (.deleteOnExit))
+          script (str "for i in $(seq 1 5000); do echo '{:a 1 :b [1 2 3]}'; done"
+                      " | " cedn-bin " > >(head -1 >/dev/null) 2>" (.getPath err-file)
+                      "; echo $?")
+          {:keys [out]} (shell/sh "bash" "-c" script)]
+      (is (= "0" (str/trim out)))
+      (is (str/blank? (slurp err-file))))))
