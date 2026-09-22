@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gen:compliance` writes byte arrays as `#bytes "hex"`, and the file is
   read with `cedn/readers`. README shows this value and its canonical
   form as a worked example.
+- README leads with idempotence: many equivalent EDN spellings collapse
+  to one canonical form, and since that form is itself ordinary EDN,
+  canonicalizing it again returns it unchanged (`cedn ∘ cedn = cedn`).
 - Tests for the fixed-point property (spec §1.2.3): canonicalizing
   canonical output is a no-op, checked over the all-types vector and
   through the CLI (`cedn | cedn | cedn`).

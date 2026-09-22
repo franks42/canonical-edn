@@ -27,44 +27,65 @@ Same logical value produces the same bytes, always, on every Clojure platform.
 
 Zero production dependencies beyond Clojure itself.
 
-## Installation
+## Idempotence: many EDNs in, one EDN out — and it stays put
 
-### deps.edn
+This is the property the whole library rests on.
 
-```clojure
-com.github.franks42/cedn {:mvn/version "1.5.0"}
+A value has endlessly many EDN spellings. `edn-1`, `edn-2`, … `edn-n`
+differ in key order, whitespace, commas, comments, map type, metadata,
+`1.50` vs `1.5`, `-0.0` vs `0.0`, uppercase vs lowercase in `#uuid` and
+`#bytes`, `#inst "2020-01-01"` vs `#inst "2020-01-01T01:00:00+01:00"`.
+They all carry the same information, so they all canonicalize to one
+representative, `cedn-0`:
+
+```
+  edn-1  ┐
+  edn-2  ├──  cedn  ──▶  cedn-0
+  …      │
+  edn-n  ┘
 ```
 
-### Babashka (bb.edn)
+`cedn-0` is not a separate format. It is ordinary EDN — any EDN reader
+reads it — so it is one of the `edn-i` itself. Canonicalizing it again
+therefore lands on the same representative:
 
-```clojure
-{:deps {com.github.franks42/cedn {:mvn/version "1.5.0"}}}
+```
+  cedn(edn-i)   =  cedn-0        for every equivalent edn-i
+  cedn(cedn-0)  =  cedn-0        because cedn-0 is one of them
 ```
 
-### nbb (nbb.edn)
+That is what makes `cedn` an *idempotent projection* (spec §1.2.3):
+`cedn ∘ cedn = cedn`. Running the pipeline twice, or ten times, changes
+nothing after the first pass.
 
-nbb cannot read JAR files, so use a git dependency instead:
+```bash
+$ printf '{:b 2 :a 1 :s #{2 1}}'                       | cedn   # key order, set order
+$ printf '{:a 1, :b 2, :s #{1 2}}'                     | cedn   # commas
+$ printf '{:s #{1 2} ; comment\n :b 2 :a 1 #_ :dropped}' | cedn   # comments, discard
+$ printf '^{:meta "gone"} {:a 1 :b 2 :s #{2 1}}'       | cedn   # metadata
 
-```clojure
-{:deps {com.github.franks42/cedn
-        {:git/url "https://github.com/franks42/canonical-edn"
-         :git/tag "v1.5.0"
-         :git/sha "eac1b3a"}}}
+{:a 1 :b 2 :s #{1 2}}      # …all four print this, and all four hash to
+                           # 9222263d2dd409ded3bd7909…
+
+$ printf '{:a 1 :b 2 :s #{1 2}}' | cedn | cedn | cedn   # same bytes, same hash
 ```
 
-### Scittle (Browser)
+The first pass burns off everything that is presentation rather than
+information: key and element order, whitespace, comments, sorted-vs-hash
+maps, records, metadata, `-0.0`, trailing zeros, uppercase hex. What
+remains is already a fixed point, which is exactly what
+`(cedn/canonical? s)` tests.
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"
-        type="application/javascript"></script>
-<script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
-<script type="application/x-scittle">
-(require '[cedn.core :as cedn])
-(println (cedn/canonical-str {:b 2 :a 1}))
-;; => {:a 1 :b 2}
-</script>
-```
+Two conditions on the round trip:
+
+- **Read with `cedn/readers`.** The default EDN reader turns a
+  nanosecond `#inst` into a millisecond `java.util.Date` and drops the
+  last six digits, so re-canonicalizing after it is not a no-op. The
+  CLI already uses them.
+- **JavaScript holds milliseconds.** Re-canonicalizing a nanosecond
+  `#inst` *on a JS runtime* yields `…123000000Z`. JS output is a fixed
+  point on JS; JVM output with sub-millisecond precision is not, if you
+  run it through JS.
 
 ## One value with everything in it
 
@@ -106,29 +127,44 @@ Map keys are sorted, the set is ordered, `#inst` gains nine fractional
 digits, the byte array becomes lowercase hex, and the NUL character is
 escaped while `café` stays literal UTF-8.
 
-## Canonical output is a fixed point
+## Installation
 
-Canonicalizing already-canonical text returns the same bytes, so the
-pipeline can be run any number of times (spec §1.2.3):
+### deps.edn
 
-```bash
-$ printf '{:b 2 :a 1 :t #inst "2020-01-01" :bs #bytes "DEAD"}' | cedn
-{:a 1 :b 2 :bs #bytes "dead" :t #inst "2020-01-01T00:00:00.000000000Z"}
-
-$ ... | cedn | cedn | cedn     # byte-identical to one pass
+```clojure
+com.github.franks42/cedn {:mvn/version "1.5.0"}
 ```
 
-The first pass burns off everything that is presentation rather than
-information: key order, whitespace, sorted-vs-hash maps, records,
-metadata, `-0.0`, uppercase hex. What is left is already a fixed point,
-which is what `cedn/canonical?` checks.
+### Babashka (bb.edn)
 
-Reading must use `cedn/readers` for this to hold — the default EDN
-reader turns a nanosecond `#inst` into a millisecond `java.util.Date`
-and loses the last six digits. One caveat across platforms: JavaScript's
-`Date` holds milliseconds, so re-canonicalizing a nanosecond timestamp
-**on a JS runtime** yields `…123000000Z`. JS-produced output is a fixed
-point on JS; JVM output with sub-millisecond precision is not.
+```clojure
+{:deps {com.github.franks42/cedn {:mvn/version "1.5.0"}}}
+```
+
+### nbb (nbb.edn)
+
+nbb cannot read JAR files, so use a git dependency instead:
+
+```clojure
+{:deps {com.github.franks42/cedn
+        {:git/url "https://github.com/franks42/canonical-edn"
+         :git/tag "v1.5.0"
+         :git/sha "eac1b3a"}}}
+```
+
+### Scittle (Browser)
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"
+        type="application/javascript"></script>
+<script type="application/x-scittle"
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
+<script type="application/x-scittle">
+(require '[cedn.core :as cedn])
+(println (cedn/canonical-str {:b 2 :a 1}))
+;; => {:a 1 :b 2}
+</script>
+```
 
 ## What cedn rejects
 
