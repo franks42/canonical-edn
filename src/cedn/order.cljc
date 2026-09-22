@@ -80,19 +80,36 @@
                c))
            (compare alen blen))))))
 
+#?(:clj
+   (defn- exact-decimal
+     "Exact BigDecimal value of an integer or double (no rounding)."
+     [x]
+     (if (int? x)
+       (java.math.BigDecimal/valueOf (long x))
+       (java.math.BigDecimal. (double x)))))
+
 (defn- compare-numbers
-  "Compare two numbers by mathematical value.
-  When equal, integer ranks before double."
+  "Compare two numbers by exact mathematical value.
+  When equal, integer ranks before double.
+
+  On the JVM, integers are never widened to double: distinct longs
+  above 2^53 would compare equal, and their order would then depend
+  on the input order (§5.3.3).  On JS every number is a double, so
+  plain comparison is already exact."
   [a b]
-  (let [cmp (compare (double a) (double b))]
+  (let [a-int? (int? a)
+        b-int? (int? b)
+        cmp #?(:clj  (cond
+                       (and a-int? b-int?) (compare (long a) (long b))
+                       (or a-int? b-int?)  (compare (exact-decimal a) (exact-decimal b))
+                       :else               (compare (double a) (double b)))
+               :cljs (compare a b))]
     (if (zero? cmp)
       ;; Same mathematical value: int < double
-      (let [a-int? (int? a)
-            b-int? (int? b)]
-        (cond
-          (and a-int? (not b-int?)) -1
-          (and (not a-int?) b-int?)  1
-          :else                      0))
+      (cond
+        (and a-int? (not b-int?)) -1
+        (and (not a-int?) b-int?)  1
+        :else                      0)
       cmp)))
 
 (defn- compare-named
@@ -182,9 +199,22 @@
     (uuid? v)                                             :uuid
     :else                                                 :unknown))
 
+#?(:clj
+   (defn- ->instant
+     "Normalize java.util.Date / java.time.Instant to Instant."
+     ^java.time.Instant [v]
+     (if (instance? java.time.Instant v)
+       v
+       (.toInstant ^java.util.Date v))))
+
 (defn- compare-tagged
   "Compare two tagged values (bytes/inst/uuid).
-  First by tag-kind (alphabetical), then by value within same kind."
+  First by tag-kind (alphabetical), then by value within same kind.
+
+  Within a kind, the order matches the canonical text of the value:
+  #inst is chronological (epoch seconds, then nanos) and #uuid is by
+  its lowercase string.  Never compare platform toString output —
+  Date.toString is timezone- and locale-dependent (§5.3.10)."
   [a b]
   (let [ka (tag-kind a)
         kb (tag-kind b)]
@@ -192,8 +222,9 @@
       (compare ka kb)
       (case ka
         :bytes (compare-bytes a b)
-        :inst  (compare (str a) (str b))
-        :uuid  (compare (str a) (str b))
+        :inst  #?(:clj  (compare (->instant a) (->instant b))
+                  :cljs (compare (.getTime a) (.getTime b)))
+        :uuid  (compare (.toLowerCase (str a)) (.toLowerCase (str b)))
         0))))
 
 (defn rank

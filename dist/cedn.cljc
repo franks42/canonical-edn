@@ -58,6 +58,16 @@
                                  :cedn/value value
                                  :cedn/path  path}))))
 
+(defn invalid-name!
+  "Throw :cedn/invalid-name for keywords/symbols whose namespace or name
+  cannot be serialized as a distinct EDN token."
+  ([value reason]      (invalid-name! value reason nil))
+  ([value reason path] (throw (ex-info "CEDN: invalid keyword or symbol name"
+                                       {:cedn/error  :cedn/invalid-name
+                                        :cedn/value  value
+                                        :cedn/reason reason
+                                        :cedn/path   path}))))
+
 (defn invalid-tag-form!
   "Throw :cedn/invalid-tag-form for tagged literals that can't be canonicalized."
   ([value]      (invalid-tag-form! value nil))
@@ -65,6 +75,103 @@
                                 {:cedn/error :cedn/invalid-tag-form
                                  :cedn/value value
                                  :cedn/path  path}))))
+
+
+(ns cedn.token
+  "Lexical validity of strings, keywords, and symbols (§3.5.4, §3.6, §3.7).
+
+  Canonical text must be injective: two different values must never
+  serialize to the same bytes.  Strings with unpaired surrogates and
+  keyword/symbol names that contain EDN delimiters or collide with
+  other token types (e.g. the symbol `nil`, or a keyword named \"a b\")
+  break that property, so they are rejected.
+
+  Not a public API — used by cedn.emit and cedn.schema."
+  (:require [clojure.string :as str]))
+
+(defn- code-at
+  "UTF-16 code unit at index i."
+  [s i]
+  #?(:clj  (int (.charAt ^String s (int i)))
+     :cljs (.charCodeAt s i)))
+
+(defn- high-surrogate? [c] (and (>= c 0xD800) (<= c 0xDBFF)))
+(defn- low-surrogate?  [c] (and (>= c 0xDC00) (<= c 0xDFFF)))
+(defn- digit?          [c] (and (>= c 0x30) (<= c 0x39)))
+
+(defn well-formed-unicode?
+  "True if s contains no unpaired UTF-16 surrogates."
+  [s]
+  (let [n (count s)]
+    (loop [i 0]
+      (if (< i n)
+        (let [c (code-at s i)]
+          (cond
+            (high-surrogate? c)
+            (if (and (< (inc i) n) (low-surrogate? (code-at s (inc i))))
+              (recur (+ i 2))
+              false)
+
+            (low-surrogate? c) false
+            :else              (recur (inc i))))
+        true))))
+
+(defn- forbidden-char?
+  "Characters that may not appear anywhere in a keyword/symbol component:
+  whitespace, control characters, comma (EDN whitespace), the solidus
+  (namespace separator), and EDN/Clojure delimiters and macro characters."
+  [c]
+  (or (<= c 0x20)
+      (= c 0x7F)
+      (case (int c)
+        (0x22 0x28 0x29 0x2C 0x2F 0x3B 0x40 0x5B 0x5C 0x5D 0x5E 0x60 0x7B 0x7D 0x7E) true
+        false)))
+
+(defn- component-error
+  "Returns nil if s is a valid namespace or name component, else a
+  short reason string.  leading-rules? applies the symbol rules for
+  the first character (everything except an unqualified keyword name)."
+  [s leading-rules?]
+  (let [n (count s)]
+    (cond
+      (zero? n)                        "empty component"
+      (not (well-formed-unicode? s))   "unpaired surrogate"
+      (some #(forbidden-char? (code-at s %)) (range n))
+      "whitespace, delimiter, or reserved character"
+      (= 0x3A (code-at s 0))           "leading colon"
+      (= 0x3A (code-at s (dec n)))     "trailing colon"
+      (str/includes? s "::")           "double colon"
+
+      (not leading-rules?)             nil
+      (digit? (code-at s 0))           "leading digit"
+      (= 0x23 (code-at s 0))           "leading #"
+      (and (> n 1)
+           (case (int (code-at s 0)) (0x2B 0x2D 0x2E) true false)
+           (digit? (code-at s 1)))     "leading +, -, or . followed by a digit"
+      :else                            nil)))
+
+(defn- named-error
+  "Shared keyword/symbol check.  The name \"/\" is always allowed."
+  [ns-part name-part keyword?]
+  (or (when ns-part (component-error ns-part true))
+      (when-not (= "/" name-part)
+        (component-error name-part (or (some? ns-part) (not keyword?))))))
+
+(defn keyword-error
+  "Returns nil if kw can be serialized as a distinct EDN keyword token,
+  else a short reason string."
+  [kw]
+  (named-error (namespace kw) (name kw) true))
+
+(defn symbol-error
+  "Returns nil if sym can be serialized as a distinct EDN symbol token,
+  else a short reason string."
+  [sym]
+  (let [ns-part   (namespace sym)
+        name-part (name sym)]
+    (if (and (nil? ns-part) (#{"nil" "true" "false"} name-part))
+      "reserved literal name"
+      (named-error ns-part name-part false))))
 
 
 (ns cedn.number
@@ -263,19 +370,36 @@
                c))
            (compare alen blen))))))
 
+#?(:clj
+   (defn- exact-decimal
+     "Exact BigDecimal value of an integer or double (no rounding)."
+     [x]
+     (if (int? x)
+       (java.math.BigDecimal/valueOf (long x))
+       (java.math.BigDecimal. (double x)))))
+
 (defn- compare-numbers
-  "Compare two numbers by mathematical value.
-  When equal, integer ranks before double."
+  "Compare two numbers by exact mathematical value.
+  When equal, integer ranks before double.
+
+  On the JVM, integers are never widened to double: distinct longs
+  above 2^53 would compare equal, and their order would then depend
+  on the input order (§5.3.3).  On JS every number is a double, so
+  plain comparison is already exact."
   [a b]
-  (let [cmp (compare (double a) (double b))]
+  (let [a-int? (int? a)
+        b-int? (int? b)
+        cmp #?(:clj  (cond
+                       (and a-int? b-int?) (compare (long a) (long b))
+                       (or a-int? b-int?)  (compare (exact-decimal a) (exact-decimal b))
+                       :else               (compare (double a) (double b)))
+               :cljs (compare a b))]
     (if (zero? cmp)
       ;; Same mathematical value: int < double
-      (let [a-int? (int? a)
-            b-int? (int? b)]
-        (cond
-          (and a-int? (not b-int?)) -1
-          (and (not a-int?) b-int?)  1
-          :else                      0))
+      (cond
+        (and a-int? (not b-int?)) -1
+        (and (not a-int?) b-int?)  1
+        :else                      0)
       cmp)))
 
 (defn- compare-named
@@ -365,9 +489,22 @@
     (uuid? v)                                             :uuid
     :else                                                 :unknown))
 
+#?(:clj
+   (defn- ->instant
+     "Normalize java.util.Date / java.time.Instant to Instant."
+     ^java.time.Instant [v]
+     (if (instance? java.time.Instant v)
+       v
+       (.toInstant ^java.util.Date v))))
+
 (defn- compare-tagged
   "Compare two tagged values (bytes/inst/uuid).
-  First by tag-kind (alphabetical), then by value within same kind."
+  First by tag-kind (alphabetical), then by value within same kind.
+
+  Within a kind, the order matches the canonical text of the value:
+  #inst is chronological (epoch seconds, then nanos) and #uuid is by
+  its lowercase string.  Never compare platform toString output —
+  Date.toString is timezone- and locale-dependent (§5.3.10)."
   [a b]
   (let [ka (tag-kind a)
         kb (tag-kind b)]
@@ -375,8 +512,9 @@
       (compare ka kb)
       (case ka
         :bytes (compare-bytes a b)
-        :inst  (compare (str a) (str b))
-        :uuid  (compare (str a) (str b))
+        :inst  #?(:clj  (compare (->instant a) (->instant b))
+                  :cljs (compare (.getTime a) (.getTime b)))
+        :uuid  (compare (.toLowerCase (str a)) (.toLowerCase (str b)))
         0))))
 
 (defn rank
@@ -415,7 +553,8 @@
 
 (ns cedn.schema
   "Hand-written predicates for CEDN-P type contracts.
-  Simple recursive walk over the closed CEDN-P type set.")
+  Simple recursive walk over the closed CEDN-P type set."
+  (:require [cedn.token :as token]))
 
 ;; --- Leaf predicates ---
 
@@ -448,9 +587,9 @@
   (cond
     (nil? v)     true
     (boolean? v) true
-    (string? v)  true
-    (keyword? v) true
-    (symbol? v)  true
+    (string? v)  (token/well-formed-unicode? v)
+    (keyword? v) (nil? (token/keyword-error v))
+    (symbol? v)  (nil? (token/symbol-error v))
     (int? v)     true
     (double? v)  (finite-double? v)
     (inst-value? v) true
@@ -503,9 +642,20 @@
   (cond
     (nil? v)        nil
     (boolean? v)    nil
-    (string? v)     nil
-    (keyword? v)    nil
-    (symbol? v)     nil
+    (string? v)     (when-not (token/well-formed-unicode? v)
+                      {:cedn/error :cedn/invalid-unicode
+                       :cedn/value v
+                       :cedn/path  path})
+    (keyword? v)    (when-let [reason (token/keyword-error v)]
+                      {:cedn/error  :cedn/invalid-name
+                       :cedn/value  v
+                       :cedn/reason reason
+                       :cedn/path   path})
+    (symbol? v)     (when-let [reason (token/symbol-error v)]
+                      {:cedn/error  :cedn/invalid-name
+                       :cedn/value  v
+                       :cedn/reason reason
+                       :cedn/path   path})
     (int? v)        nil
     (double? v)     (when-not (finite-double? v)
                       {:cedn/error :cedn/invalid-number
@@ -557,6 +707,7 @@
   Not a public API — use cedn.core/canonical-bytes."
   (:require [cedn.order  :as order]
             [cedn.number :as number]
+            [cedn.token  :as token]
             [cedn.error  :as err])
   #?(:clj  (:import [java.lang StringBuilder]
                     [java.time Instant ZoneOffset]
@@ -595,8 +746,12 @@
         (.append sb ch)))))
 
 (defn- emit-string
-  "Emit a canonical string with proper escaping."
+  "Emit a canonical string with proper escaping.
+  Unpaired surrogates have no UTF-8 encoding (§3.5.4) — the platform
+  encoder would silently replace them, colliding with \"?\" or U+FFFD."
   [^StringBuilder sb s]
+  (when-not (token/well-formed-unicode? s)
+    (err/invalid-unicode! s))
   (.append sb \")
   (doseq [ch s]
     (emit-string-char sb ch))
@@ -668,7 +823,7 @@
 
 ;; --- Core emit ---
 
-(declare emit)
+(declare emit emit-str)
 
 (defn- emit-elements
   "Emit a sequence of values separated by spaces."
@@ -681,40 +836,54 @@
       (emit sb profile (first items))
       (recur false (next items)))))
 
+(defn- sort-canonical
+  "Canonicalize (key-fn item) for each item and sort by rank.
+  Returns [canonical-text item] pairs in canonical order.
+
+  Duplicates are items whose keys have identical canonical text, not
+  just (=) keys: a java.util.Date and a java.time.Instant for the same
+  moment, two byte arrays with the same content, or a record and a map
+  with the same entries are not (=) but serialize identically (§3.10,
+  §3.11).  Rank ties are broken by canonical text so the output never
+  depends on input iteration order, even if rank were not total."
+  [profile key-fn dup! items]
+  (let [pairs (sort (fn [[sa a] [sb b]]
+                      (let [c (order/rank (key-fn a) (key-fn b))]
+                        (if (zero? c) (compare sa sb) c)))
+                    (map (fn [item] [(emit-str profile (key-fn item)) item])
+                         items))]
+    (doseq [[[sa a] [sb _]] (partition 2 1 pairs)]
+      (when (= sa sb)
+        (dup! (key-fn a))))
+    pairs))
+
 (defn- emit-set
-  "Emit a set: sort by rank, check for duplicates, emit."
+  "Emit a set: sort by rank, reject duplicate canonical forms, emit."
   [^StringBuilder sb profile s]
   (.append sb "#{")
-  (let [sorted (sort order/rank s)]
-    ;; Check adjacent elements for duplicates
-    (when (> (count sorted) 1)
-      (doseq [[a b] (partition 2 1 sorted)]
-        (when (= a b)
-          (err/duplicate-element! a))))
-    (emit-elements sb profile sorted))
+  (loop [first? true
+         pairs (seq (sort-canonical profile identity err/duplicate-element! s))]
+    (when pairs
+      (when-not first?
+        (.append sb \space))
+      (.append sb ^String (ffirst pairs))
+      (recur false (next pairs))))
   (.append sb \}))
 
 (defn- emit-map
-  "Emit a map: sort entries by key rank, check for duplicate keys, emit."
+  "Emit a map: sort entries by key rank, reject duplicate canonical keys, emit."
   [^StringBuilder sb profile m]
   (.append sb \{)
-  (let [entries (sort-by first order/rank m)
-        ks (map first entries)]
-    ;; Check adjacent keys for duplicates
-    (when (> (count entries) 1)
-      (doseq [[a b] (partition 2 1 ks)]
-        (when (= a b)
-          (err/duplicate-key! a))))
-    (loop [first? true
-           entries (seq entries)]
-      (when entries
-        (when-not first?
-          (.append sb \space))
-        (let [[k v] (first entries)]
-          (emit sb profile k)
-          (.append sb \space)
-          (emit sb profile v))
-        (recur false (next entries)))))
+  (loop [first? true
+         pairs (seq (sort-canonical profile key err/duplicate-key! m))]
+    (when pairs
+      (when-not first?
+        (.append sb \space))
+      (let [[k-str entry] (first pairs)]
+        (.append sb ^String k-str)
+        (.append sb \space)
+        (emit sb profile (val entry)))
+      (recur false (next pairs))))
   (.append sb \}))
 
 (defn emit
@@ -750,6 +919,8 @@
     (keyword? value)
     (let [ns (namespace value)
           n  (name value)]
+      (when-let [reason (token/keyword-error value)]
+        (err/invalid-name! value reason))
       (.append sb \:)
       (when ns
         (.append sb ns)
@@ -759,6 +930,8 @@
     (symbol? value)
     (let [ns (namespace value)
           n  (name value)]
+      (when-let [reason (token/symbol-error value)]
+        (err/invalid-name! value reason))
       (when ns
         (.append sb ns)
         (.append sb \/))
@@ -828,7 +1001,7 @@
                    [java.time Instant]
                    [java.util UUID])))
 
-(def version "1.2.0")
+(def version "1.3.1")
 
 ;; =============================================================
 ;; 1. Core canonicalization

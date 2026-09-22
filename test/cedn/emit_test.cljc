@@ -223,3 +223,114 @@
     (is (= "#{1 2 3}" (emit/emit-str :cedn-p #{3 1 2})))
     (is (= "{:a 2 :m 3 :z 1}" (emit/emit-str :cedn-p {:z 1 :a 2 :m 3})))
     (is (= "[1 2 3]" (emit/emit-str :cedn-p [1 2 3])))))
+
+;; --- Helpers for error-class assertions ---
+
+(defn- error-class
+  "The :cedn/error of the exception thrown by (emit-str :cedn-p v), or nil."
+  [v]
+  (try
+    (emit/emit-str :cedn-p v)
+    nil
+    (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
+      (:cedn/error (ex-data e)))))
+
+(defn- ba [xs]
+  #?(:clj (byte-array (map unchecked-byte xs)) :cljs (js/Uint8Array. (clj->js xs))))
+
+;; --- Output never depends on input iteration order (§8.1) ---
+
+(deftest emit-order-independent-test
+  (testing "map keys near 2^53"
+    (is (= "{9007199254740992 :a 9007199254740994 :b}"
+           (emit/emit-str :cedn-p (array-map 9007199254740994 :b 9007199254740992 :a))
+           (emit/emit-str :cedn-p (array-map 9007199254740992 :a 9007199254740994 :b)))))
+  #?(:clj
+     (testing "longs above 2^53, as map keys and set elements"
+       (is (= "{9007199254740992 :a 9007199254740993 :b}"
+              (emit/emit-str :cedn-p (array-map 9007199254740993 :b 9007199254740992 :a))
+              (emit/emit-str :cedn-p (array-map 9007199254740992 :a 9007199254740993 :b))))
+       (is (= "#{9007199254740992 9007199254740993}"
+              (emit/emit-str :cedn-p (sorted-set-by < 9007199254740992 9007199254740993))
+              (emit/emit-str :cedn-p (sorted-set-by > 9007199254740992 9007199254740993))))
+       (is (= "{9007199254740992.0 :d 9007199254740993 :i}"
+              (emit/emit-str :cedn-p (array-map 9007199254740993 :i 9007199254740992.0 :d))
+              (emit/emit-str :cedn-p (array-map 9007199254740992.0 :d 9007199254740993 :i))))))
+  (testing "#inst values sorted chronologically"
+    (is (= (str "#{#inst \"1970-01-01T00:00:00.000000000Z\""
+                " #inst \"1970-01-02T00:00:00.000000000Z\""
+                " #inst \"1970-01-06T00:00:00.000000000Z\"}")
+           (emit/emit-str :cedn-p #?(:clj  #{(Date. 0) (Date. 86400000) (Date. 432000000)}
+                                     :cljs #{(js/Date. 0) (js/Date. 86400000) (js/Date. 432000000)}))))))
+
+;; --- Duplicates are identical canonical forms, not just (=) (§3.10, §3.11) ---
+
+(defrecord Point [x y])
+
+(deftest emit-duplicate-canonical-form-test
+  #?(:clj
+     (testing "Date and Instant for the same moment"
+       (is (= :cedn/duplicate-element (error-class #{(Date. 0) Instant/EPOCH})))
+       (is (= :cedn/duplicate-key (error-class {(Date. 0) 1 Instant/EPOCH 2})))
+       (is (= "#{#inst \"1970-01-01T00:00:00.000000000Z\" #inst \"1970-01-01T00:00:00.000000001Z\"}"
+              (emit/emit-str :cedn-p #{(Date. 0) (Instant/ofEpochSecond 0 1)})))))
+  (testing "byte arrays with the same content"
+    (is (= :cedn/duplicate-element (error-class (hash-set (ba [1 2]) (ba [1 2])))))
+    (is (= :cedn/duplicate-key (error-class (hash-map (ba [1 2]) :a (ba [1 2]) :b))))
+    (is (= "#{#bytes \"01\" #bytes \"0102\"}"
+           (emit/emit-str :cedn-p #{(ba [1 2]) (ba [1])}))))
+  (testing "a record and a map with the same entries"
+    (is (= :cedn/duplicate-element (error-class #{(->Point 1 2) {:x 1 :y 2}}))))
+  (testing "nested duplicates are found"
+    (is (= :cedn/duplicate-element (error-class [{:k (hash-set (ba [9]) (ba [9]))}]))))
+  #?(:cljs
+     (testing "CLJS UUIDs differing only in case (UUID constructor keeps case)"
+       (is (= :cedn/duplicate-element
+              (error-class #{(UUID. "ABCDEF00-0000-0000-0000-000000000000" nil)
+                             (UUID. "abcdef00-0000-0000-0000-000000000000" nil)}))))))
+
+;; --- Unpaired surrogates (§3.5.4) ---
+
+(deftest emit-invalid-unicode-test
+  (testing "unpaired surrogates are rejected"
+    (are [s] (= :cedn/invalid-unicode (error-class s))
+      "\uD800"
+      "\uDC00"
+      "a\uD800"
+      "\uDC00\uD800"))
+  (testing "also inside collections and map keys"
+    (is (= :cedn/invalid-unicode (error-class ["ok" "\uD800"])))
+    (is (= :cedn/invalid-unicode (error-class {"\uDFFF" 1}))))
+  (testing "valid surrogate pairs pass through as literal characters"
+    (is (= "\"😀\"" (emit/emit-str :cedn-p "😀")))))
+
+;; --- Keyword and symbol names (§3.6, §3.7) ---
+
+(deftest emit-invalid-name-test
+  (testing "names that would collide with other values are rejected"
+    (are [v] (= :cedn/invalid-name (error-class v))
+      (symbol "nil")          ; would emit as nil
+      (symbol "true")         ; would emit as true
+      (symbol "1")            ; would emit as the integer 1
+      (symbol "-1.5")         ; would emit as a double
+      (symbol ":a")           ; would emit as the keyword :a
+      (symbol "#inst")        ; with a string, would emit as an #inst
+      (keyword "a b")         ; [:a b] — keyword followed by symbol
+      (symbol "a b")
+      (symbol "[a]")
+      (symbol "\"x\"")
+      (keyword "a/b" "c")     ; :a/b/c is also (keyword "a" "b/c")
+      (keyword "a" "b/c")
+      (keyword "")
+      (keyword "a\uD800")))
+  (testing "nested names are checked"
+    (is (= :cedn/invalid-name (error-class {:ok [(symbol "nil")]}))))
+  (testing "valid edge-case names still emit"
+    (are [v expected] (= expected (emit/emit-str :cedn-p v))
+      (keyword "200")   ":200"
+      (keyword "café")  ":café"
+      '/                "/"
+      'clojure.core//   "clojure.core//"
+      'foo/nil          "foo/nil"
+      '+                "+"
+      '<=>              "<=>")))

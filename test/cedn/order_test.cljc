@@ -133,3 +133,95 @@
 (deftest rank-lists-vs-vectors-test
   (testing "all lists before all vectors (type priority 6 vs 7)"
     (is (neg? (order/rank '(999) [1])))))
+
+;; --- Exact numeric comparison (§5.3.3) ---
+
+(deftest rank-numbers-exact-test
+  (testing "integers near 2^53 exactly representable on every platform"
+    (is (neg? (order/rank 9007199254740992 9007199254740994)))
+    (is (pos? (order/rank 9007199254740994 9007199254740992))))
+  #?(:clj
+     (testing "longs above 2^53 are not widened to double"
+       (is (neg? (order/rank 9007199254740992 9007199254740993)))
+       (is (pos? (order/rank 9007199254740993 9007199254740992)))
+       (is (neg? (order/rank (dec Long/MAX_VALUE) Long/MAX_VALUE)))))
+  #?(:clj
+     (testing "long vs double compared by exact value"
+       (is (pos? (order/rank 9007199254740993 9007199254740992.0)))
+       (is (neg? (order/rank 9007199254740992.0 9007199254740993)))
+       ;; 2^62 as a double; its shortest decimal form (…7900) is not its
+       ;; exact value (…7904), so comparison must not go through strings
+       (is (neg? (order/rank 4611686018427387903 4.611686018427387904E18)))
+       (is (pos? (order/rank 4611686018427387905 4.611686018427387904E18)))
+       ;; 2^63 as a double exceeds every long
+       (is (neg? (order/rank Long/MAX_VALUE 9.223372036854775807E18)))
+       (is (pos? (order/rank Long/MIN_VALUE -9.223372036854777E18)))))
+  #?(:clj
+     (testing "-0.0 and 0.0 are the same mathematical value"
+       (is (zero? (order/rank -0.0 0.0))))))
+
+;; --- Tagged literal ordering (§5.3.10) ---
+
+(defn- date [ms] #?(:clj (java.util.Date. (long ms)) :cljs (js/Date. ms)))
+
+(def ^:private day 86400000)
+
+(deftest rank-inst-chronological-test
+  (testing "chronological, not by Date.toString (weekday/month names)"
+    ;; Thu 1970-01-01, Fri 01-02, Tue 01-06: toString order would be Fri < Thu < Tue
+    (is (= [0 day (* 5 day)]
+           (map #(.getTime %) (sort order/rank [(date (* 5 day)) (date day) (date 0)]))))
+    ;; Sun 2023-01-01 vs Mon 2023-01-02 vs Fri 2022-12-30 (month and year roll back)
+    (is (= [1672358400000 1672531200000 1672617600000]
+           (map #(.getTime %) (sort order/rank [(date 1672617600000)
+                                                (date 1672358400000)
+                                                (date 1672531200000)])))))
+  (testing "same day, different hour"
+    (is (neg? (order/rank (date 0) (date (quot day 2))))))
+  (testing "pre-epoch dates"
+    (is (neg? (order/rank (date -1) (date 0))))))
+
+;; JVM only: bb's native image cannot change the default TimeZone.
+#?(:bb  nil
+   :clj
+   (deftest rank-inst-timezone-independent-test
+     (testing "order does not depend on the JVM default timezone"
+       (let [original (java.util.TimeZone/getDefault)
+             dates    (map #(date (* % 7 3600000)) (range 20))
+             expected (map #(.getTime ^java.util.Date %) dates)]
+         (try
+           (doseq [tz ["UTC" "America/New_York" "Pacific/Kiritimati" "Asia/Kolkata"]]
+             (java.util.TimeZone/setDefault (java.util.TimeZone/getTimeZone ^String tz))
+             (is (= expected (map #(.getTime ^java.util.Date %)
+                                  (sort order/rank (reverse dates))))
+                 tz))
+           (finally
+             (java.util.TimeZone/setDefault original)))))))
+
+#?(:clj
+   (deftest rank-instant-test
+     (testing "fractional seconds rank before the next whole second"
+       (is (neg? (order/rank (java.time.Instant/ofEpochMilli 500)
+                             (java.time.Instant/ofEpochSecond 1)))))
+     (testing "nanosecond resolution"
+       (is (neg? (order/rank (java.time.Instant/ofEpochSecond 0 1)
+                             (java.time.Instant/ofEpochSecond 0 2)))))
+     (testing "Date and Instant share one timeline"
+       (is (zero? (order/rank (java.util.Date. 0) java.time.Instant/EPOCH)))
+       (is (neg? (order/rank (java.util.Date. 0) (java.time.Instant/ofEpochSecond 0 1))))
+       (is (pos? (order/rank (java.util.Date. 1) (java.time.Instant/ofEpochSecond 0 999999)))))))
+
+(deftest rank-uuid-test
+  (testing "by canonical (lowercase) string"
+    (is (neg? (order/rank #uuid "00000000-0000-0000-0000-000000000001"
+                          #uuid "00000000-0000-0000-0000-000000000002")))
+    ;; UUID.compareTo is signed: it would put 8000… before 0000…
+    (is (neg? (order/rank #uuid "00000000-0000-0000-0000-000000000000"
+                          #uuid "80000000-0000-0000-0000-000000000000"))))
+  #?(:cljs
+     ;; cljs.core/uuid lowercases, but the UUID constructor keeps case
+     (testing "CLJS UUIDs can keep input case; rank must ignore it"
+       (is (pos? (order/rank (UUID. "B0000000-0000-0000-0000-000000000000" nil)
+                             (UUID. "a0000000-0000-0000-0000-000000000000" nil))))
+       (is (zero? (order/rank (UUID. "ABCDEF00-0000-0000-0000-000000000000" nil)
+                              (UUID. "abcdef00-0000-0000-0000-000000000000" nil)))))))

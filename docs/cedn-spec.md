@@ -47,7 +47,8 @@ is made available under the terms of the MIT License.
 10. [Appendix A: ABNF Grammar](#appendix-a-abnf-grammar)
 11. [Appendix B: Number Serialization Samples](#appendix-b-number-serialization-samples)
 12. [Appendix C: Conformance Test Vectors](#appendix-c-conformance-test-vectors)
-13. [Authors' Addresses](#authors-addresses)
+13. [Appendix D: Revision Notes](#appendix-d-revision-notes)
+14. [Authors' Addresses](#authors-addresses)
 
 ---
 
@@ -494,6 +495,13 @@ Strings containing unpaired surrogates (lone high surrogate U+D800–
 U+DBFF or lone low surrogate U+DC00–U+DFFF) MUST cause an
 `invalid-unicode` error (Section 7).
 
+> **Rationale:**  An unpaired surrogate has no UTF-8 encoding.
+> Platform encoders silently substitute a replacement character —
+> the JVM emits `?` (U+003F), JavaScript's `TextEncoder` emits
+> U+FFFD — so `"\uD800"` would produce the same bytes as `"?"` on
+> one platform and a third value on another: both a collision and
+> a cross-platform divergence (Section 8.7).
+
 ### 3.6. Keywords
 
 **Canonical form**: A colon (`:`) followed by the keyword name, or
@@ -507,6 +515,57 @@ Normative rules:
 4.  The namespace and name components MUST appear exactly as stored
     in the runtime keyword object.  No normalization of casing or
     encoding is applied.
+5.  Each component MUST satisfy the name validity rules of
+    Section 3.6.1; otherwise an `invalid-name` error (Section 7)
+    MUST be raised.
+
+#### 3.6.1. Name Validity (Keywords and Symbols)
+
+Because components are emitted verbatim (rule 4), a component that
+contains EDN syntax could make two different values serialize to
+the same bytes.  For example, the keyword whose name is `"a b"`
+would emit `:a b` — identical to the keyword `:a` followed by the
+symbol `b` — and the symbol whose name is `"nil"` would emit `nil`.
+The following rules make keyword and symbol serialization injective,
+and ensure the output reads back as the same keyword or symbol.
+
+Every namespace and name component MUST satisfy all of:
+
+1.  It is non-empty.
+2.  It contains no unpaired surrogates (Section 3.5.4).
+3.  It contains none of: U+0000–U+0020 (control characters and
+    space), U+007F, or any of `"` `,` `/` `;` `(` `)` `[` `]` `{`
+    `}` `\` `@` `^` `` ` `` `~`.
+4.  It does not begin or end with `:` and does not contain `::`.
+
+Additionally, every component EXCEPT the name of an unqualified
+keyword MUST satisfy the leading-character rules:
+
+5.  It does not begin with a digit (`0`–`9`) or `#`.
+6.  If it begins with `+`, `-`, or `.`, the second character (if
+    any) is not a digit.
+
+Unqualified keyword names are exempt from rules 5 and 6 because the
+leading `:` already makes them unambiguous and readable (`:200`,
+`:#tag`); keywordized numeric identifiers such as HTTP status codes
+are common in practice.  Qualified keyword names are not exempt:
+`:a/1` is not a readable EDN token.
+
+Exceptions and additional rules:
+
+7.  A name consisting of exactly `/` is valid for both keywords and
+    symbols, qualified or not (`/`, `clojure.core//`, `:/`).
+8.  An unqualified symbol MUST NOT be named `nil`, `true`, or
+    `false` (these would serialize as the literals).  Qualified
+    symbols such as `foo/nil` are valid.
+
+```
+  Valid:     :a  :ns/a  :200  :#a  :a:b  :café  a  +  -  .  +a  <=>
+             /  clojure.core//  foo/nil
+  Invalid:   (keyword "a b")   (keyword "a/b" "c")   (keyword "a" "1")
+             (keyword ":a")    (symbol "nil")        (symbol "1")
+             (symbol "-1")     (symbol "#inst")      (symbol "[a]")
+```
 
 ### 3.7. Symbols
 
@@ -519,6 +578,10 @@ Normative rules:
 2.  Qualified symbols: `namespace/name`
 3.  The namespace and name components MUST appear exactly as stored
     in the runtime symbol object.
+4.  Each component MUST satisfy the name validity rules of
+    Section 3.6.1 (including the reserved names `nil`, `true`,
+    `false`); otherwise an `invalid-name` error (Section 7) MUST be
+    raised.
 
 ### 3.8. Lists
 
@@ -581,8 +644,13 @@ Normative rules:
 2.  Exactly one space separates adjacent elements.
 3.  No space after `#{` or before `}`.
 4.  Empty set: `#{}`
-5.  Elements that are value-equal (`=`) after normalization MUST
-    cause a `duplicate-element` error (Section 7).
+5.  Elements whose canonical forms are identical MUST cause a
+    `duplicate-element` error (Section 7).  This is broader than
+    platform value equality (`=`): for example, a `java.util.Date`
+    and a `java.time.Instant` for the same moment, two byte arrays
+    with the same content, or a record and a map with the same
+    entries are not `=`, yet serialize identically.  Emitting both
+    would produce a set that no EDN reader accepts.
 
 Examples:
 
@@ -607,8 +675,8 @@ Normative rules:
     value of one entry and the key of the next).
 4.  No space after `{` or before `}`.
 5.  Empty map: `{}`
-6.  Keys that are value-equal (`=`) after normalization MUST cause
-    a `duplicate-key` error (Section 7).
+6.  Keys whose canonical forms are identical MUST cause a
+    `duplicate-key` error (Section 7).  See Section 3.10 rule 5.
 
 All map types (hash-map, sorted-map, array-map, records) MUST
 produce the same output for the same logical content.  Records are
@@ -917,6 +985,14 @@ Only one value.  No ordering needed.
 All numeric types within a profile are ordered by mathematical
 value.
 
+Comparison MUST be exact.  Implementations MUST NOT convert
+integers to doubles for comparison: distinct 64-bit integers above
+2^53 (e.g. `9007199254740992` and `9007199254740993`) would compare
+equal, and their relative order would then depend on input
+iteration order.  An integer and a double are compared by their
+exact mathematical values (`9007199254740992.0` <
+`9007199254740993`).
+
 When two values are mathematically equal but have different types
 (e.g., integer `1` and double `1.0`), the integer ranks first.
 In CEDN-R, the full sub-ordering for equal mathematical values is:
@@ -991,6 +1067,23 @@ Tagged literals are ordered by:
 1.  Tag symbol (using symbol ordering, Section 5.3.6).
 2.  If same tag: by the tagged value (using rank).
 
+For the CEDN-P tags this means:
+
+-  `#bytes`: lexicographic by unsigned byte value, shorter first
+   (equivalently, by the lowercase hex string).
+-  `#inst`: chronological — by epoch seconds, then nanoseconds.
+   This equals the order of the canonical RFC 3339 strings for
+   years 0000–9999.  Values of different platform types (e.g.
+   `java.util.Date` and `java.time.Instant`) share one timeline.
+-  `#uuid`: by the canonical lowercase string (Section 3.13).  Note
+   this is NOT `java.util.UUID.compareTo`, which compares signed
+   64-bit halves.
+
+Implementations MUST NOT order tagged values by the platform's
+`toString()`.  `java.util.Date.toString()` and `js/Date.toString()`
+render weekday and month names in the default timezone, so such an
+order is neither chronological nor the same on two machines.
+
 ---
 
 ## 6. Byte Encoding
@@ -1044,11 +1137,15 @@ worse than no output.
   invalid-unicode      String contains unpaired UTF-16 surrogates
                        (Section 3.5.4).
 
-  duplicate-key        Map contains keys that are value-equal (=)
-                       after normalization (Section 3.11).
+  invalid-name         Keyword or symbol whose namespace or name
+                       violates the name validity rules
+                       (Section 3.6.1).
 
-  duplicate-element    Set contains elements that are value-equal
-                       (=) after normalization (Section 3.10).
+  duplicate-key        Map contains keys whose canonical forms are
+                       identical (Section 3.11).
+
+  duplicate-element    Set contains elements whose canonical forms
+                       are identical (Section 3.10).
 ```
 
 ### 7.2. Error Reporting
@@ -1130,6 +1227,26 @@ NON-CONFORMING.
 
 Verifiers MUST reject any signature where the `:cedn/version`
 value cannot be authenticated as part of the signed content.
+
+### 8.7. Injectivity
+
+Determinism (Section 8.1) is half of the security property; the
+other half is injectivity: two different values MUST NOT produce
+the same canonical bytes.  A collision lets one signed value stand
+in for another.  The following rules exist specifically to close
+collision classes and MUST NOT be relaxed by implementations:
+
+-  Strings with unpaired surrogates are rejected (Section 3.5.4),
+   because platform encoders replace them with `?` or U+FFFD.
+-  Keyword and symbol components are validated (Section 3.6.1),
+   because a verbatim name containing spaces, delimiters, or a
+   literal name (`nil`) would serialize as a different value.
+-  Duplicate detection uses identical canonical forms, not
+   platform equality (Sections 3.10, 3.11).
+-  Ordering is exact and never uses platform string conversions
+   (Sections 5.3.3, 5.3.10), so equal-ranking values always have
+   identical canonical forms and output never depends on input
+   iteration order.
 
 ---
 
@@ -1272,8 +1389,8 @@ valid EDN.
   canonical-symbol  = sym-name
                     / sym-namespace "/" sym-name
 
-  sym-name          = <per EDN symbol rules>
-  sym-namespace     = <per EDN symbol rules>
+  sym-name          = <per EDN symbol rules, restricted by Section 3.6.1>
+  sym-namespace     = <per EDN symbol rules, restricted by Section 3.6.1>
 
   ; --- Collections ---
 
@@ -1444,6 +1561,9 @@ The following inputs MUST produce the indicated error under CEDN-P:
   22/7                     unsupported-type
   \a                       unsupported-type
   #"regex"                 unsupported-type
+  "\uD800"                 invalid-unicode      ; lone surrogate
+  (symbol "nil")           invalid-name         ; would emit as nil
+  (keyword "a b")          invalid-name         ; would emit as :a b
 ```
 
 ### C.5. String Escaping
@@ -1464,6 +1584,28 @@ The following inputs MUST produce the indicated error under CEDN-P:
 > **Note:** The last two examples demonstrate that non-ASCII
 > characters MUST appear as literal UTF-8, never as `\uNNNN`
 > escapes.
+
+---
+
+## Appendix D: Revision Notes
+
+**September 2026 — injectivity and determinism clarifications.**
+These close cases where the February 2026 text either allowed two
+different values to share canonical bytes, or left output dependent
+on input iteration order.  Output for values that were already
+handled deterministically and injectively is unchanged.
+
+-  Section 3.6.1 (new): name validity rules for keyword and symbol
+   components; new `invalid-name` error class (Section 7.1).
+-  Sections 3.10, 3.11: duplicates are defined by identical
+   canonical forms rather than platform `=`.
+-  Section 5.3.3: numeric comparison MUST be exact (no widening of
+   integers to doubles).
+-  Section 5.3.10: explicit ordering for `#bytes`, `#inst`
+   (chronological) and `#uuid` (canonical string); platform
+   `toString()` is forbidden for ordering.
+-  Section 3.5.4: rationale added; the rule itself is unchanged.
+-  Section 8.7 (new): injectivity as a security property.
 
 ---
 

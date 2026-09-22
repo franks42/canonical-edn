@@ -1,6 +1,7 @@
 (ns cedn.schema
   "Hand-written predicates for CEDN-P type contracts.
-  Simple recursive walk over the closed CEDN-P type set.")
+  Simple recursive walk over the closed CEDN-P type set."
+  (:require [cedn.token :as token]))
 
 ;; --- Leaf predicates ---
 
@@ -33,9 +34,9 @@
   (cond
     (nil? v)     true
     (boolean? v) true
-    (string? v)  true
-    (keyword? v) true
-    (symbol? v)  true
+    (string? v)  (token/well-formed-unicode? v)
+    (keyword? v) (nil? (token/keyword-error v))
+    (symbol? v)  (nil? (token/symbol-error v))
     (int? v)     true
     (double? v)  (finite-double? v)
     (inst-value? v) true
@@ -88,9 +89,20 @@
   (cond
     (nil? v)        nil
     (boolean? v)    nil
-    (string? v)     nil
-    (keyword? v)    nil
-    (symbol? v)     nil
+    (string? v)     (when-not (token/well-formed-unicode? v)
+                      {:cedn/error :cedn/invalid-unicode
+                       :cedn/value v
+                       :cedn/path  path})
+    (keyword? v)    (when-let [reason (token/keyword-error v)]
+                      {:cedn/error  :cedn/invalid-name
+                       :cedn/value  v
+                       :cedn/reason reason
+                       :cedn/path   path})
+    (symbol? v)     (when-let [reason (token/symbol-error v)]
+                      {:cedn/error  :cedn/invalid-name
+                       :cedn/value  v
+                       :cedn/reason reason
+                       :cedn/path   path})
     (int? v)        nil
     (double? v)     (when-not (finite-double? v)
                       {:cedn/error :cedn/invalid-number

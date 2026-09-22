@@ -11,6 +11,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 constant — and bump the matching constants in `src/cedn/core.cljc` and
 `build.clj` — before tagging the next release.)
 
+Canonicalization fixes for determinism and injectivity. **Output
+changes** for inputs that previously hit these bugs (sets/maps of
+`#inst`, integers above 2^53, integers vs. doubles near 2^53); inputs
+that are now rejected previously produced colliding or invalid output.
+See `docs/cedn-spec.md` Appendix D and `context.md` decisions 7–11.
+
+### Fixed
+
+- `#inst` values are ordered chronologically. Previously they were
+  ordered by `Date.toString()` — weekday names in the machine's default
+  timezone — so the same set of dates canonicalized differently on
+  different machines. `#uuid` ordering now uses the canonical lowercase
+  string on CLJS too.
+- Numbers are compared exactly. Distinct longs above 2^53 no longer rank
+  equal (which made their order follow input iteration order), and
+  integer-vs-double comparison is exact on the JVM.
+- Duplicate set elements / map keys are detected by identical canonical
+  text instead of `=`: a `Date` and an `Instant` for the same moment,
+  byte arrays with the same content, or a record and an equal map now
+  throw `:cedn/duplicate-element` / `:cedn/duplicate-key` instead of
+  emitting an unreadable set or map.
+- Strings with unpaired UTF-16 surrogates now throw
+  `:cedn/invalid-unicode` (spec §3.5.4). Previously the JVM encoded them
+  as `?`, colliding with `"?"`.
+
+### Added
+
+- `:cedn/invalid-name` error: keywords and symbols whose names would
+  serialize as a different value are rejected — e.g. `(symbol "nil")`,
+  `(symbol "1")`, `(keyword "a b")`, `(keyword "a/b" "c")`. Rules are in
+  new spec §3.6.1; `:200`, `clojure.core//` and `foo/nil` remain valid.
+  `valid?` / `explain` apply the same checks.
+- `cedn.token` namespace (internal) holding the lexical checks;
+  `dist/cedn.cljc` includes it.
+- Tests for each fix, plus adversarial property tests (name round-trip,
+  arbitrary UTF-16 strings, map key-order independence).
+
 ## [1.3.1] — 2026-05-04 — Release-workflow fix
 
 No library code changes. v1.3.0 tag's CI run failed at the Clojars deploy step because `clojure -T:build deploy` couldn't resolve `org.clojure/clojure 1.12.0` — `tools.build`'s `create-basis` runs in a separate resolver context from the surrounding tool-mode classpath, and on a fresh CI runner ~/.m2 the artifact wasn't pre-populated.

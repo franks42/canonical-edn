@@ -8,6 +8,7 @@
   Not a public API — use cedn.core/canonical-bytes."
   (:require [cedn.order  :as order]
             [cedn.number :as number]
+            [cedn.token  :as token]
             [cedn.error  :as err])
   #?(:clj  (:import [java.lang StringBuilder]
                     [java.time Instant ZoneOffset]
@@ -46,8 +47,12 @@
         (.append sb ch)))))
 
 (defn- emit-string
-  "Emit a canonical string with proper escaping."
+  "Emit a canonical string with proper escaping.
+  Unpaired surrogates have no UTF-8 encoding (§3.5.4) — the platform
+  encoder would silently replace them, colliding with \"?\" or U+FFFD."
   [^StringBuilder sb s]
+  (when-not (token/well-formed-unicode? s)
+    (err/invalid-unicode! s))
   (.append sb \")
   (doseq [ch s]
     (emit-string-char sb ch))
@@ -119,7 +124,7 @@
 
 ;; --- Core emit ---
 
-(declare emit)
+(declare emit emit-str)
 
 (defn- emit-elements
   "Emit a sequence of values separated by spaces."
@@ -132,40 +137,54 @@
       (emit sb profile (first items))
       (recur false (next items)))))
 
+(defn- sort-canonical
+  "Canonicalize (key-fn item) for each item and sort by rank.
+  Returns [canonical-text item] pairs in canonical order.
+
+  Duplicates are items whose keys have identical canonical text, not
+  just (=) keys: a java.util.Date and a java.time.Instant for the same
+  moment, two byte arrays with the same content, or a record and a map
+  with the same entries are not (=) but serialize identically (§3.10,
+  §3.11).  Rank ties are broken by canonical text so the output never
+  depends on input iteration order, even if rank were not total."
+  [profile key-fn dup! items]
+  (let [pairs (sort (fn [[sa a] [sb b]]
+                      (let [c (order/rank (key-fn a) (key-fn b))]
+                        (if (zero? c) (compare sa sb) c)))
+                    (map (fn [item] [(emit-str profile (key-fn item)) item])
+                         items))]
+    (doseq [[[sa a] [sb _]] (partition 2 1 pairs)]
+      (when (= sa sb)
+        (dup! (key-fn a))))
+    pairs))
+
 (defn- emit-set
-  "Emit a set: sort by rank, check for duplicates, emit."
+  "Emit a set: sort by rank, reject duplicate canonical forms, emit."
   [^StringBuilder sb profile s]
   (.append sb "#{")
-  (let [sorted (sort order/rank s)]
-    ;; Check adjacent elements for duplicates
-    (when (> (count sorted) 1)
-      (doseq [[a b] (partition 2 1 sorted)]
-        (when (= a b)
-          (err/duplicate-element! a))))
-    (emit-elements sb profile sorted))
+  (loop [first? true
+         pairs (seq (sort-canonical profile identity err/duplicate-element! s))]
+    (when pairs
+      (when-not first?
+        (.append sb \space))
+      (.append sb ^String (ffirst pairs))
+      (recur false (next pairs))))
   (.append sb \}))
 
 (defn- emit-map
-  "Emit a map: sort entries by key rank, check for duplicate keys, emit."
+  "Emit a map: sort entries by key rank, reject duplicate canonical keys, emit."
   [^StringBuilder sb profile m]
   (.append sb \{)
-  (let [entries (sort-by first order/rank m)
-        ks (map first entries)]
-    ;; Check adjacent keys for duplicates
-    (when (> (count entries) 1)
-      (doseq [[a b] (partition 2 1 ks)]
-        (when (= a b)
-          (err/duplicate-key! a))))
-    (loop [first? true
-           entries (seq entries)]
-      (when entries
-        (when-not first?
-          (.append sb \space))
-        (let [[k v] (first entries)]
-          (emit sb profile k)
-          (.append sb \space)
-          (emit sb profile v))
-        (recur false (next entries)))))
+  (loop [first? true
+         pairs (seq (sort-canonical profile key err/duplicate-key! m))]
+    (when pairs
+      (when-not first?
+        (.append sb \space))
+      (let [[k-str entry] (first pairs)]
+        (.append sb ^String k-str)
+        (.append sb \space)
+        (emit sb profile (val entry)))
+      (recur false (next pairs))))
   (.append sb \}))
 
 (defn emit
@@ -201,6 +220,8 @@
     (keyword? value)
     (let [ns (namespace value)
           n  (name value)]
+      (when-let [reason (token/keyword-error value)]
+        (err/invalid-name! value reason))
       (.append sb \:)
       (when ns
         (.append sb ns)
@@ -210,6 +231,8 @@
     (symbol? value)
     (let [ns (namespace value)
           n  (name value)]
+      (when-let [reason (token/symbol-error value)]
+        (err/invalid-name! value reason))
       (when ns
         (.append sb ns)
         (.append sb \/))

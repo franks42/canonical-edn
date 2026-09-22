@@ -69,3 +69,10 @@
   (let [data (error-data err/invalid-tag-form! 'foo [:t])]
     (is (= 'foo (:cedn/value data)))
     (is (= [:t] (:cedn/path data)))))
+
+(deftest invalid-name-test
+  (is (= :cedn/invalid-name (error-keyword err/invalid-name! 'x "reason")))
+  (let [data (error-data err/invalid-name! 'x "leading digit" [:k])]
+    (is (= 'x (:cedn/value data)))
+    (is (= "leading digit" (:cedn/reason data)))
+    (is (= [:k] (:cedn/path data)))))

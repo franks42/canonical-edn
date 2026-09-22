@@ -9,12 +9,12 @@
                                 'cedn.number-test    'cedn.order-test
                                 'cedn.core-test      'cedn.emit-test
                                 'cedn.error-test     'cedn.schema-test
-                                'cedn.xplatform-test)
+                                'cedn.token-test     'cedn.xplatform-test)
                        (let [r (clojure.test/run-tests
                                  'cedn.number-test    'cedn.order-test
                                  'cedn.core-test      'cedn.emit-test
                                  'cedn.error-test     'cedn.schema-test
-                                 'cedn.xplatform-test)]
+                                 'cedn.token-test     'cedn.xplatform-test)]
                          (when (pos? (+ (:fail r) (:error r)))
                            (System/exit 1))))}
 
@@ -24,18 +24,19 @@
                               (quote cedn.error-test)    (quote cedn.number-test)
                               (quote cedn.order-test)    (quote cedn.schema-test)
                               (quote cedn.emit-test)     (quote cedn.core-test)
-                              (quote cedn.xplatform-test))
+                              (quote cedn.token-test)    (quote cedn.xplatform-test))
                      (cljs.test/run-tests
                        (quote cedn.error-test)    (quote cedn.number-test)
                        (quote cedn.order-test)    (quote cedn.schema-test)
                        (quote cedn.emit-test)     (quote cedn.core-test)
-                       (quote cedn.xplatform-test))")}
+                       (quote cedn.token-test)    (quote cedn.xplatform-test))")}
 
   test:cljs {:doc  "Run shadow-cljs tests"
              :task (shell "npx" "shadow-cljs" "compile" "test")}
 
   build:scittle {:doc  "Concatenate CLJC sources into dist/cedn.cljc for Scittle/browser use"
                  :task (let [sources ["src/cedn/error.cljc"
+                                      "src/cedn/token.cljc"
                                       "src/cedn/number.cljc"
                                       "src/cedn/order.cljc"
                                       "src/cedn/schema.cljc"

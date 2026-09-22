@@ -55,6 +55,16 @@
                                  :cedn/value value
                                  :cedn/path  path}))))
 
+(defn invalid-name!
+  "Throw :cedn/invalid-name for keywords/symbols whose namespace or name
+  cannot be serialized as a distinct EDN token."
+  ([value reason]      (invalid-name! value reason nil))
+  ([value reason path] (throw (ex-info "CEDN: invalid keyword or symbol name"
+                                       {:cedn/error  :cedn/invalid-name
+                                        :cedn/value  value
+                                        :cedn/reason reason
+                                        :cedn/path   path}))))
+
 (defn invalid-tag-form!
   "Throw :cedn/invalid-tag-form for tagged literals that can't be canonicalized."
   ([value]      (invalid-tag-form! value nil))

@@ -72,3 +72,32 @@
 (deftest unknown-profile-throws-test
   (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                (schema/schema-for :cedn-unknown))))
+
+;; --- Lexical checks agree with emit (§3.5.4, §3.6, §3.7) ---
+
+(deftest invalid-unicode-test
+  (is (not (schema/valid? :cedn-p "\uD800")))
+  (is (not (schema/valid? :cedn-p ["ok" "a\uDC00"])))
+  (is (schema/valid? :cedn-p "😀"))
+  (is (= {:cedn/error :cedn/invalid-unicode
+          :cedn/value "\uD800"
+          :cedn/path  [:s 1]}
+         (schema/explain :cedn-p {:s ["ok" "\uD800"]}))))
+
+(deftest invalid-name-test
+  (are [v] (not (schema/valid? :cedn-p v))
+    (symbol "nil")
+    (symbol "1")
+    (keyword "a b")
+    (keyword "a/b" "c")
+    #{(symbol "true")}
+    {(keyword "") 1})
+  (are [v] (schema/valid? :cedn-p v)
+    (keyword "200")
+    'clojure.core//
+    'foo/nil)
+  (let [e (schema/explain :cedn-p [:ok (symbol "nil")])]
+    (is (= :cedn/invalid-name (:cedn/error e)))
+    (is (= (symbol "nil") (:cedn/value e)))
+    (is (= [1] (:cedn/path e)))
+    (is (= "reserved literal name" (:cedn/reason e)))))

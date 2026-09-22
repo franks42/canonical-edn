@@ -129,6 +129,75 @@ design decisions, project state, and workflow notes across sessions.
    - No realistic authorization scenario requires >64-bit integers,
      exact decimals, or ratios.
 
+### Injectivity & determinism hardening (unreleased, 2026-09)
+
+A review found cases where the same logical value produced different
+bytes, or different values produced the same bytes — both are
+signature-bypass class bugs (spec §8.1, §8.7).  Decisions 7–11 close
+them; spec text updated accordingly (see spec Appendix D).
+
+7. **`#inst` ordering is chronological, never `toString`.**
+   `compare-tagged` used `(compare (str a) (str b))`; for `Date`/`js/Date`
+   that is `"Thu Jan 01 00:00:00 EST 1970"` — ordered by weekday name, in
+   the machine's default timezone.  The same set of dates canonicalized
+   differently under `TZ=UTC` and `TZ=America/New_York`.  Now: JVM
+   normalizes `Date`/`Instant` to `Instant` and compares (seconds, nanos);
+   CLJS compares `.getTime`.  `#uuid` compares the lowercase string (CLJS
+   `UUID.` keeps input case; `java.util.UUID.compareTo` is signed — both
+   wrong).  Spec §5.3.10.
+
+8. **Numeric ordering is exact.**
+   `compare-numbers` widened to `double`, so distinct longs above 2^53
+   ranked equal and their order followed input iteration order
+   (`{9007199254740993 1 9007199254740992 2}` emitted in insertion order).
+   Now: long–long via `compare` on longs; int–double via exact
+   `BigDecimal` (`BigDecimal/valueOf long` / `(BigDecimal. double)` — not
+   `bigdec`, whose shortest-repr conversion is inexact for 2^62-sized
+   doubles).  CLJS unchanged (all numbers are doubles).  Spec §5.3.3.
+
+9. **Duplicates = identical canonical text, not `=`.**
+   `emit-set`/`emit-map` checked adjacent `=`.  A `Date` and an `Instant`
+   for the same moment, two byte arrays with the same content, a record
+   and a map with the same entries, or CLJS UUIDs differing in case are
+   not `=` but serialize identically — output contained a duplicate,
+   which no EDN reader accepts.  Now `sort-canonical` emits each
+   element/key once to its own string, sorts by rank, rejects adjacent
+   identical strings, and reuses those strings for output.  Rank ties
+   are broken by canonical text, so output can never depend on input
+   order even if a future rank bug made two distinct forms tie.
+   Spec §3.10 rule 5, §3.11 rule 6.
+
+10. **Unpaired surrogates rejected (§3.5.4 was specified, not
+    implemented).**  `err/invalid-unicode!` existed but was never
+    called.  On the JVM `"\uD800"` encoded to `?` — the same bytes as
+    `"?"`; `TextEncoder` gives U+FFFD instead (cross-platform divergence
+    too).  Now checked in `emit-string` and `schema`.
+
+11. **Keyword/symbol name validation — new `:cedn/invalid-name` error.**
+    Components are emitted verbatim (spec §3.6 rule 4), so
+    `[(symbol "nil")]` ≡ `[nil]`, `[(keyword "a b")]` ≡ `[:a 'b]`,
+    `(keyword "a/b" "c")` ≡ `(keyword "a" "b/c")`, `(symbol "#inst")` +
+    string ≡ an `#inst`.  New spec §3.6.1 rules, implemented in
+    `cedn.token`.  Rules were checked against what `clojure.edn` actually
+    reads: `:200`, `:#a`, `clojure.core//`, `foo/nil` stay valid; `:a/1`
+    and `a/1` are rejected (the reader rejects them too).  Unqualified
+    keyword names are exempt from the leading-digit rules because
+    keywordized numeric keys (HTTP status codes) are common.
+    `valid?`/`explain` apply the same rules, so they agree with emit.
+
+    Tests: per-rule unit tests plus three adversarial properties in
+    `property_test.cljc` — hostile names must read back as themselves
+    (proves no name collisions), arbitrary UTF-16 strings must round-trip
+    or be rejected (oracle: UTF-8 encode/decode, independent of
+    `cedn.token`), and a map built from rank-tie-prone keys (2^53
+    neighbours, Date/Instant, byte arrays) must give the same result in
+    either insertion order.  All of these fail against v1.3.1.
+
+    Still open from the same review: `#inst` years outside 0000–9999
+    emit invalid RFC 3339; `#bytes` reader accepts odd-length/non-hex
+    input; `clj -X:test` discovers only `jar-smoke-test` (run with
+    `clj -M:test -r 'cedn.*'`) and CI runs only bb/CLI tests.
+
 ## Project Structure
 
 ```
@@ -168,6 +237,7 @@ cedn/
 │       ├── order.cljc          ← rank comparator
 │       ├── number.cljc         ← ECMAScript double formatting
 │       ├── error.cljc          ← structured error constructors
+│       ├── token.cljc          ← surrogate + keyword/symbol name validity
 │       ├── schema.cljc         ← hand-written type predicates
 │       └── gen.cljc            ← test.check generators
 └── test/
@@ -180,6 +250,7 @@ cedn/
         ├── cedn-p-compliance-vectors.edn  ← CEDN-P compliance test vectors (RFC-style)
         ├── error_test.cljc     ← error constructor tests
         ├── schema_test.cljc    ← schema validation tests
+        ├── token_test.cljc     ← string/keyword/symbol lexical rules
         ├── property_test.cljc  ← generative property tests
         └── xplatform_test.cljc ← cross-platform byte comparison tests
 ```
@@ -374,8 +445,10 @@ cedn.core
   ├── cedn.emit
   │     ├── cedn.number
   │     ├── cedn.order
+  │     ├── cedn.token
   │     └── cedn.error
   ├── cedn.schema
+  │     └── cedn.token
   └── cedn.order (re-exported as cedn.core/rank)
 
 cedn.gen
@@ -389,8 +462,9 @@ cedn.gen
 - **Closed type dispatch**: `cond` chain in `emit`, NOT protocols/multimethods.
   Order matters: nil → boolean → int → double → string → keyword → symbol →
   seq → vector → set → map → #inst → #uuid → #bytes → error.
-- **Duplicate detection**: After sorting sets/maps, check adjacent elements/keys
-  for equality. O(n) after O(n log n) sort.
+- **Duplicate detection**: Each set element / map key is emitted to its own
+  string once; after sorting, adjacent identical strings are duplicates
+  (decision 9). The strings are reused for output. O(n) after O(n log n) sort.
 - **Cross-platform .cljc**: All files are `.cljc` with reader conditionals for
   JVM/CLJS differences (StringBuilder vs StringBuffer, format-double, #inst/#uuid).
 
