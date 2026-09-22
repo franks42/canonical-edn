@@ -148,8 +148,16 @@
                              rank    (deref (resolve 'cedn.core/rank))
                              ;; Print maps and sets in canonical order so the
                              ;; file is stable across runs and platforms.
+                             bytes?' (fn [v] (bytes? v))
+                             hexstr  (fn [bs]
+                                       (apply str
+                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                              (seq bs))))
                              ordered (fn ordered [v]
                                        (cond
+                                         ;; byte arrays have no EDN print form:
+                                         ;; write them as #bytes "hex"
+                                         (bytes?' v) (tagged-literal 'bytes (hexstr v))
                                          (map? v) (into (sorted-map-by rank)
                                                         (map (fn [[k x]] [(ordered k) (ordered x)]) v))
                                          (set? v) (into (sorted-set-by rank) (map ordered v))

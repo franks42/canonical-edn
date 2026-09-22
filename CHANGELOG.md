@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The compliance vector now contains **every** CEDN-P type: `#bytes` and
+  the empty collections were missing, though its docstring claimed
+  otherwise (`#bytes` shipped in 1.2.0). The golden file
+  `test/cedn/cedn-p-compliance-vectors.edn` is regenerated accordingly,
+  `gen:compliance` writes byte arrays as `#bytes "hex"`, and the file is
+  read with `cedn/readers`. README shows this value and its canonical
+  form as a worked example.
+- Tests for the fixed-point property (spec §1.2.3): canonicalizing
+  canonical output is a no-op, checked over the all-types vector and
+  through the CLI (`cedn | cedn | cedn`).
+
 (Active dev cycle. Bump the `version` constants in `bin/cedn`,
 `src/cedn/core.cljc` and `build.clj` — they must agree with the tag, and
 `release.yml` refuses to release otherwise — before tagging the next

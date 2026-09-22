@@ -66,6 +66,70 @@ nbb cannot read JAR files, so use a git dependency instead:
 </script>
 ```
 
+## One value with everything in it
+
+This is the compliance vector in
+[`test/cedn/cedn-p-compliance-vectors.edn`](test/cedn/cedn-p-compliance-vectors.edn)
+— every CEDN-P type in one map, with its canonical form. Every platform
+must produce exactly these bytes, and the file is what another
+implementation checks itself against.
+
+```clojure
+{:nil-val     nil
+ :bools       [true false]
+ :ints        [0 1 -1 42 -7 9007199254740991]
+ :doubles     [3.141592653589793 0.5 -1.5 0.1 1e-7]
+ :strings     ["" "hello" "café" "a\tb" "a\nb" "a\"b" "a\\b" "\u0000"]
+ :keywords    [:foo :ns/bar]
+ :symbols     ['foo 'ns/bar]
+ :collections {:list '(1 2 3) :map {:b 2 :a 1} :set #{3 1 2} :vec [1 2 3]}
+ :empties     [() [] #{} {}]
+ :nested      {:a [1 #{:x :y}] :b "hello"}
+ :inst        #inst "1970-01-01T00:00:00.000Z"
+ :uuid        #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"
+ :bytes       (byte-array [0xde 0xad 0xbe 0xef])}
+```
+
+canonicalizes to (one line, shown wrapped):
+
+```
+{:bools [true false] :bytes #bytes "deadbeef" :collections {:list (1 2 3)
+ :map {:a 1 :b 2} :set #{1 2 3} :vec [1 2 3]} :doubles [3.141592653589793
+ 0.5 -1.5 0.1 1e-7] :empties [() [] #{} {}] :inst
+ #inst "1970-01-01T00:00:00.000000000Z" :ints [0 1 -1 42 -7 9007199254740991]
+ :keywords [:foo :ns/bar] :nested {:a [1 #{:x :y}] :b "hello"} :nil-val nil
+ :strings ["" "hello" "café" "a\tb" "a\nb" "a\"b" "a\\b" "\u0000"]
+ :symbols [foo ns/bar] :uuid #uuid "f81d4fae-7dec-11d0-a765-00a0c91e6bf6"}
+```
+
+Map keys are sorted, the set is ordered, `#inst` gains nine fractional
+digits, the byte array becomes lowercase hex, and the NUL character is
+escaped while `café` stays literal UTF-8.
+
+## Canonical output is a fixed point
+
+Canonicalizing already-canonical text returns the same bytes, so the
+pipeline can be run any number of times (spec §1.2.3):
+
+```bash
+$ printf '{:b 2 :a 1 :t #inst "2020-01-01" :bs #bytes "DEAD"}' | cedn
+{:a 1 :b 2 :bs #bytes "dead" :t #inst "2020-01-01T00:00:00.000000000Z"}
+
+$ ... | cedn | cedn | cedn     # byte-identical to one pass
+```
+
+The first pass burns off everything that is presentation rather than
+information: key order, whitespace, sorted-vs-hash maps, records,
+metadata, `-0.0`, uppercase hex. What is left is already a fixed point,
+which is what `cedn/canonical?` checks.
+
+Reading must use `cedn/readers` for this to hold — the default EDN
+reader turns a nanosecond `#inst` into a millisecond `java.util.Date`
+and loses the last six digits. One caveat across platforms: JavaScript's
+`Date` holds milliseconds, so re-canonicalizing a nanosecond timestamp
+**on a JS runtime** yields `…123000000Z`. JS-produced output is a fixed
+point on JS; JVM output with sub-millisecond precision is not.
+
 ## What cedn rejects
 
 Canonicalization is a cryptographic function, so cedn errors rather than

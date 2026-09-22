@@ -166,3 +166,14 @@
           {:keys [out]} (shell/sh "bash" "-c" script)]
       (is (= "0" (str/trim out)))
       (is (str/blank? (slurp err-file))))))
+
+(deftest cli-output-is-a-fixed-point
+  (testing "cedn of cedn output is byte-identical (spec §1.2.3)"
+    (let [input "{:b 2 :a 1 :s #{3 1 2} :t #inst \"2020-01-01\" :u #uuid \"F81D4FAE-7DEC-11D0-A765-00A0C91E6BF6\" :d 1.50 :bs #bytes \"DEAD\"}"
+          once  (:out (run [] input))
+          twice (:out (run [] once))
+          third (:out (run [] twice))]
+      (is (= once twice))
+      (is (= twice third))
+      ;; and the first pass really did normalize something
+      (is (not= input (str/trim once))))))
