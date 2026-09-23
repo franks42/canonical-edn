@@ -13,14 +13,14 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.5.1 — documentation release (no library code change). v1.5.0 brought profile enforcement, strict `#uuid` and CLI I/O correctness, on top of v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
+**v1.5.2 — runtimes and published-artifact tests (no library code change). v1.5.1 was a documentation release. v1.5.0 brought profile enforcement, strict `#uuid` and CLI I/O correctness, on top of v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
 
 ## Session Handoff (2026-09-22)
 
 Everything from the 2026-09 review is closed and released (v1.4.0,
-v1.5.0, v1.5.1 — see decisions 6–13 and the CHANGELOG).  `main` is
+v1.5.0, v1.5.1, v1.5.2 — see decisions 6–13 and the CHANGELOG).  `main` is
 clean, CI is green, all five platforms plus the CLI pass locally.
 
 ### Open items, roughly in priority order
@@ -34,8 +34,9 @@ clean, CI is green, all five platforms plus the CLI pass locally.
    Scittle bundle, #13 a clean error when `bin/cedn`'s `add-deps` fails,
    #14 `bb.edn` test-task repetition.  Its correctness items are done.
 
-Closed since 1.5.1 (unreleased, see CHANGELOG): README pins the CDN
-bundle to `@v1.5.1` instead of `@main`; spec header dates refreshed;
+Closed in 1.5.2 (see CHANGELOG): README pins the CDN bundle to the
+release tag instead of `@main`; runtimes updated (Clojure 1.12.6,
+ClojureScript 1.12.145, shadow-cljs 3.5.3, Scittle 0.8.33, CI Node 26); spec header dates refreshed;
 `bb test:scittle-cdn [ref]`, `bb test:nbb-git` and `bb test:published`
 test what the README tells users to load, weekly via
 `.github/workflows/published.yml`.  `bb test:scittle-cdn` with no
@@ -65,23 +66,33 @@ argument still tests `@main`.
 - Tooling present: `bb`, `clojure`, JDK 25 (sdkman), `nbb`, `node`,
   `gh` (authenticated, git credential helper), Playwright browsers.
 
-### Release procedure (as executed for 1.4.0 / 1.5.0 / 1.5.1)
+### Release procedure (as executed for 1.4.0 – 1.5.2)
 
 1. `bb test:all`, plus `bb test:jar` and `bb test:cli-release`.
 2. Bump `version` in `src/cedn/core.cljc`, `bin/cedn`, `build.clj`
    (`version-test` checks they agree; `release.yml` checks them against
    the tag).  `bb build:scittle` to refresh `dist/`.  Point the README's
-   Scittle URL at the new tag (`@vX.Y.Z`) and its nbb `:git/tag` too —
-   both can go in the release commit.
+   Maven coords, Scittle URL (`@vX.Y.Z`), CLI download URL and
+   `cedn/version` example at the new version in the release commit.
+   Leave the nbb snippet on the previous release's matching tag+sha pair.
 3. CHANGELOG: turn `[Unreleased]` into the new version section.
 4. Commit, push, wait for CI green, then `git tag -a vX.Y.Z` and push
    the tag — that triggers the Clojars deploy and GitHub Release.
-5. Afterwards, point the README's nbb `:git/sha` at the tagged commit in
-   a follow-up commit (the tagged commit cannot contain its own sha).
+5. Afterwards, move the README's nbb `:git/tag` and `:git/sha` to the new
+   release together, in a follow-up commit (the tagged commit cannot
+   contain its own sha, and a new tag with the old sha does not resolve).
 6. Verify from outside: `bb test:published` (CDN bundle at the pinned tag
    reports the new version; nbb git dep resolves from an empty gitlibs
    cache), Clojars JAR 200, release asset downloads and runs with an
    empty `~/.m2`.
+
+### v1.5.2 — runtimes and published-artifact tests
+
+No library code change.  Clojure 1.12.6 (the JAR's pom now names it),
+ClojureScript 1.12.145, shadow-cljs 3.5.3, Scittle 0.8.33, CI on Node 26.
+README pins the CDN bundle to the release tag; `bb test:scittle-cdn
+[ref]`, `bb test:nbb-git` and `bb test:published` (weekly in
+`published.yml`) test what the README tells users to load.
 
 ### v1.5.1 — documentation
 
@@ -159,7 +170,7 @@ The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.5.1"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.5.2"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
@@ -455,7 +466,7 @@ ECMAScript implementation for 20,000+ doubles.
 ```clojure
 (require '[cedn.core :as cedn])
 
-cedn/version  ;=> "1.5.1"
+cedn/version  ;=> "1.5.2"
 
 ;; Canonicalize to bytes (for signing/hashing)
 (cedn/canonical-bytes {:a 1 :b 2})
@@ -693,7 +704,7 @@ Browser usage (CDN):
 ```html
 <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.33/dist/scittle.js"></script>
 <script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.1/dist/cedn.cljc"></script>
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.2/dist/cedn.cljc"></script>
 ```
 
 ## What's NOT Built Yet

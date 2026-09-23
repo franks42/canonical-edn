@@ -4,7 +4,7 @@
 //
 // Usage: node test/run-scittle-cdn.mjs [ref]
 //   ref defaults to "main" (what CI will publish next); pass a release tag
-//   such as v1.5.1 to test what the README tells users to load.
+//   such as v1.5.2 to test what the README tells users to load.
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";

@@ -12,7 +12,7 @@
             [clojure.edn :as edn])
   #?(:clj (:import [java.security MessageDigest])))
 
-(def version "1.5.1")
+(def version "1.5.2")
 
 ;; =============================================================
 ;; 1. Core canonicalization

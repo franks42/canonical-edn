@@ -12,9 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+## [1.5.2] — 2026-09-22 — Runtimes and published-artifact tests
+
+No library code changes: `src/` is identical to 1.5.1 apart from the
+version constant. The JAR's pom now names Clojure 1.12.6.
+
 ### Changed
 
-- README pins the Scittle CDN bundle to the release tag (`@v1.5.1`)
+- README pins the Scittle CDN bundle to the release tag (`@v1.5.2`)
   instead of `@main`, which followed unreleased development.
 - Spec header dates refreshed (September 2026, expires March 2027).
 
@@ -33,6 +38,7 @@ release.)
 - Clojure 1.12.6 (from 1.12.0; the JAR's only dependency, so its pom now
   names 1.12.6), ClojureScript 1.12.145 (from 1.11.132), shadow-cljs 3.5.3
   (from 2.28.23), Scittle 0.8.33 (from 0.8.31, also in the README snippet).
+- CI runs on Node 26 (from 22).
 
 ### Fixed
 
