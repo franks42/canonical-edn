@@ -1,8 +1,8 @@
 ```
 Canonical EDN v1                                       
-Internet-Draft                                         February 2026
+Internet-Draft                                        September 2026
 Intended status: Informational
-Expires: August 2026
+Expires: March 2027
 ```
 
 # Canonical EDN (CEDN) v1: A Deterministic Serialization for EDN Values

@@ -71,6 +71,7 @@
   ;; === SMOKE TESTS ===
 
   (log "CDN source: jsdelivr/gh/franks42/canonical-edn@main/dist/cedn.cljc")
+  (log "cedn version: " cedn/version)
 
   (section "cedn.core — canonical-str")
   (check "nil"        "nil"           (cedn/canonical-str nil))

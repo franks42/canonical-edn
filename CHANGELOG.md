@@ -12,6 +12,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+### Changed
+
+- README pins the Scittle CDN bundle to the release tag (`@v1.5.1`)
+  instead of `@main`, which followed unreleased development.
+- Spec header dates refreshed (September 2026, expires March 2027).
+
+### Added
+
+- `bb test:scittle-cdn [ref]` takes a git ref (default `main`); for a
+  release tag it also checks that the bundle reports that version.
+- `bb test:nbb-git` resolves the README's nbb.edn git coordinates with an
+  empty gitlibs cache. `bb test:nbb-dep` uses `:local/root`, so a wrong
+  tag or sha in the README was never tested.
+- `bb test:published` runs both against what the README tells users to
+  load, and `.github/workflows/published.yml` runs it weekly.
+
+### Fixed
+
+- The Playwright runners passed `{timeout}` as `waitForFunction`'s page
+  argument, so the 60 s timeout was ignored and Playwright's 30 s default
+  applied.
+
 ## [1.5.1] — 2026-09-22 — Documentation
 
 No library code changes: `src/` is identical to 1.5.0 apart from the

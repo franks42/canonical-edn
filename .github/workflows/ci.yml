@@ -126,8 +126,9 @@ jobs:
         run: bb test:scittle
 
       - name: Check dist/cedn.cljc is up to date
-        # dist/ is generated from src/ and served to browsers from @main
-        # via jsdelivr, so a stale commit ships old code to CDN users.
+        # dist/ is generated from src/ and served to browsers by jsdelivr
+        # at whatever tag the README pins, so a stale dist/ in a release
+        # commit ships old code to CDN users.
         run: |
           bb build:scittle
           git diff --exit-code -- dist/cedn.cljc \

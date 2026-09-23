@@ -184,13 +184,16 @@ nbb cannot read JAR files, so use a git dependency instead:
 <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"
         type="application/javascript"></script>
 <script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.1/dist/cedn.cljc"></script>
 <script type="application/x-scittle">
 (require '[cedn.core :as cedn])
 (println (cedn/canonical-str {:b 2 :a 1}))
 ;; => {:a 1 :b 2}
 </script>
 ```
+
+Pin a release tag as above.  `@main` also works but follows unreleased
+development, and bytes you sign should come from a fixed version.
 
 ## What cedn rejects
 
@@ -271,13 +274,16 @@ error.
 |---|---|---|
 | Clojure (JVM) | Maven JAR via `deps.edn` | `bb test:jar` |
 | Babashka | Maven JAR via `bb.edn` | `bb test:jar` |
-| nbb | Git dep via `nbb.edn` | `bb test:nbb-dep` |
+| nbb | Git dep via `nbb.edn` | `bb test:nbb-dep`, `bb test:nbb-git` |
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
-| Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
+| Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn [ref]` |
 | `cedn` CLI | GitHub release asset | `bb test:cli`, `bb test:cli-release` |
 
 Every platform runs in CI on each push, because the guarantee this
-library makes is that they all produce the same bytes.
+library makes is that they all produce the same bytes.  The published
+artifacts — the CDN bundle at the tag the README pins, and the README's
+nbb git coordinates — need the network, so `bb test:published` checks
+them in a weekly scheduled workflow instead.
 
 ## Specification
 

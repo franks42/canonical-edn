@@ -67,6 +67,7 @@ async function run() {
     // Wait for the test framework to set window.cednTestResults
     const results = await page.waitForFunction(
       () => window.cednTestResults,
+      null,
       { timeout: TIMEOUT_MS }
     );
     const { pass, fail, total } = await results.jsonValue();

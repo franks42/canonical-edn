@@ -25,22 +25,21 @@ clean, CI is green, all five platforms plus the CLI pass locally.
 
 ### Open items, roughly in priority order
 
-1. **README pins the browser build to `@main`, not a release.**
-   `cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc`
-   means browser users silently track unreleased `main`.  For a library
-   whose output feeds signatures, that should be `@v1.5.1`.  Note
-   `test/scittle-cdn-test.html` and `bb test:scittle-cdn` also fetch
-   `@main`; decide whether the test follows `main` (catches CDN staleness
-   before release) or the pinned tag (matches what users load), and make
-   README and test agree.
-2. **The spec's Internet-Draft header is stale** — "February 2026 /
-   Expires: August 2026" (`docs/cedn-spec.md`, line 1).  Either refresh
-   the dates or drop the I-D framing if it is never going to IETF.
-3. **`inspect` returns `:sha-256 nil` on CLJS.**  `SubtleCrypto.digest`
+1. **`inspect` returns `:sha-256 nil` on CLJS.**  `SubtleCrypto.digest`
    is async; would need an async variant or a bundled sync SHA-256.
-4. **`bb test:scittle-cdn` is not in CI** (it hits the network).  Worth
-   a scheduled run rather than a per-push one.
-5. **CEDN-R** stays unimplemented and actively rejected (decision 6).
+2. **CEDN-R** stays unimplemented and actively rejected (decision 6).
+3. **Low-priority suggestions from `docs/review-kimi-20260605.md`** not
+   acted on: #7 `format-bytes` into the StringBuilder, #9 CLJS
+   `compare-strings` array copies, #12 stripping `ns` forms from the
+   Scittle bundle, #13 a clean error when `bin/cedn`'s `add-deps` fails,
+   #14 `bb.edn` test-task repetition.  Its correctness items are done.
+
+Closed since 1.5.1 (unreleased, see CHANGELOG): README pins the CDN
+bundle to `@v1.5.1` instead of `@main`; spec header dates refreshed;
+`bb test:scittle-cdn [ref]`, `bb test:nbb-git` and `bb test:published`
+test what the README tells users to load, weekly via
+`.github/workflows/published.yml`.  `bb test:scittle-cdn` with no
+argument still tests `@main`.
 
 ### Environment notes (macOS, this laptop — new machine, Sept 2026)
 
@@ -71,14 +70,18 @@ clean, CI is green, all five platforms plus the CLI pass locally.
 1. `bb test:all`, plus `bb test:jar` and `bb test:cli-release`.
 2. Bump `version` in `src/cedn/core.cljc`, `bin/cedn`, `build.clj`
    (`version-test` checks they agree; `release.yml` checks them against
-   the tag).  `bb build:scittle` to refresh `dist/`.
+   the tag).  `bb build:scittle` to refresh `dist/`.  Point the README's
+   Scittle URL at the new tag (`@vX.Y.Z`) and its nbb `:git/tag` too —
+   both can go in the release commit.
 3. CHANGELOG: turn `[Unreleased]` into the new version section.
 4. Commit, push, wait for CI green, then `git tag -a vX.Y.Z` and push
    the tag — that triggers the Clojars deploy and GitHub Release.
 5. Afterwards, point the README's nbb `:git/sha` at the tagged commit in
    a follow-up commit (the tagged commit cannot contain its own sha).
-6. Verify from outside: Clojars JAR 200, release asset downloads and
-   runs with an empty `~/.m2`, git dep resolves.
+6. Verify from outside: `bb test:published` (CDN bundle at the pinned tag
+   reports the new version; nbb git dep resolves from an empty gitlibs
+   cache), Clojars JAR 200, release asset downloads and runs with an
+   empty `~/.m2`.
 
 ### v1.5.1 — documentation
 
@@ -171,12 +174,10 @@ Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `cloj
 | Property tests | Done | 4 properties × 200 iterations: idempotency, valid EDN, determinism, str/bytes agreement |
 | Cross-platform bytes | Done | 40 values × 2 checks (canonical-str + bytes hex): proves all 5 platforms produce identical output for the same inputs. Compliance test vectors stored in `cedn-p-compliance-vectors.edn` (IETF RFC-style). |
 
-**Test results: JVM 75 / 386, bb 86 / 1,485, nbb 82 / 416, shadow-cljs 93 / 439, Scittle 69 / 69, Scittle-CDN 28 / 28 — 0 failures on all platforms.**
+**Test results (tests / assertions, 2026-09-22): JVM 145 / 21,825, bb 112 / 1,726, nbb 106 / 633, shadow-cljs 122 / 661, Scittle 69 / 69, Scittle-CDN 28 / 28, CLI 22 / 49 — 0 failures on all platforms.**
 **Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
 
-**Persistent project memory is stored in MCP memory (tag: `cedn`).**
-Use `memory_search` with query "CEDN" or filter by tag "cedn" to retrieve
-design decisions, project state, and workflow notes across sessions.
+Design decisions and project state live in this file and the CHANGELOG.
 
 ## Reference Documents
 
@@ -239,7 +240,7 @@ design decisions, project state, and workflow notes across sessions.
    - No realistic authorization scenario requires >64-bit integers,
      exact decimals, or ratios.
 
-### Injectivity & determinism hardening (unreleased, 2026-09)
+### Injectivity & determinism hardening (released in v1.4.0)
 
 A review found cases where the same logical value produced different
 bytes, or different values produced the same bytes — both are
@@ -303,9 +304,8 @@ them; spec text updated accordingly (see spec Appendix D).
     neighbours, Date/Instant, byte arrays) must give the same result in
     either insertion order.  All of these fail against v1.3.1.
 
-    Still open from the same review: `#inst` years outside 0000–9999
-    emit invalid RFC 3339; `#bytes` reader accepts odd-length/non-hex
-    input.
+    The same review also found `#inst` years outside 0000–9999 and a
+    lenient `#bytes` reader; both are closed by decision 12.
 
 12. **Readers are strict and platform-uniform; `#inst` years 0000–9999.**
     Three reader/emit edge cases from the review:
@@ -338,7 +338,10 @@ them; spec text updated accordingly (see spec Appendix D).
     runner to `cedn.*` namespaces (`deps.edn` `:test` alias).  New
     `.github/workflows/ci.yml` runs JVM + bb + CLI tests, lint and fmt
     on pushes to main and PRs; `release.yml` now also gates the Clojars
-    deploy on `bb test:jvm`.  CLJS/nbb/Scittle are not in CI yet.
+    deploy on `bb test:jvm`.  CI's `js` job has since added shadow-cljs,
+    nbb, the nbb dep smoke test, Scittle (headless Chromium) and a
+    `dist/cedn.cljc` staleness check.  Network-dependent checks run
+    weekly in `published.yml`.
 
 ## Project Structure
 
@@ -348,7 +351,7 @@ cedn/
 ├── bb.edn                     ← Babashka project config (test:bb, test:cli, install, release-check, etc.)
 ├── build.clj                  ← tools.build script (jar, install, deploy)
 ├── README.md                  ← Installation, usage, distribution docs
-├── CHANGELOG.md               ← Keep-a-Changelog format, current at v1.3.1
+├── CHANGELOG.md               ← Keep-a-Changelog format
 ├── shadow-cljs.edn            ← shadow-cljs build config (CLJS :node-test)
 ├── package.json               ← npm deps (shadow-cljs)
 ├── scittle-tests.html         ← Scittle browser test page (69 tests, loads dist/cedn.cljc)
@@ -359,13 +362,14 @@ cedn/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml             ← push/PR: JVM matrix (21, 25) + CLJS/nbb/Scittle job
+│       ├── published.yml      ← weekly: CDN bundle (main + pinned tag), README nbb git dep
 │       └── release.yml        ← v*.*.* tag → Clojars deploy + GH Release with bin/cedn asset
 ├── context.md                  ← this file
 ├── test/
 │   ├── jar_smoke_test.clj     ← JVM JAR dependency smoke test (bb test:jar)
 │   ├── nbb_smoke_test.cljs    ← nbb git dependency smoke test (bb test:nbb-dep)
 │   ├── run-scittle.mjs        ← Playwright test runner (local, 69 tests)
-│   ├── run-scittle-cdn.mjs    ← Playwright test runner (jsdelivr CDN, 28 smoke tests)
+│   ├── run-scittle-cdn.mjs    ← Playwright test runner (jsdelivr CDN at a git ref, 28 smoke tests)
 │   └── scittle-cdn-test.html  ← CDN smoke test page
 ├── .clj-kondo/config.edn      ← kondo config (defspec lint-as)
 ├── docs/
@@ -397,6 +401,7 @@ cedn/
         ├── token_test.cljc     ← string/keyword/symbol lexical rules
         ├── reader_test.cljc    ← #inst grammar + #bytes reader strictness
         ├── property_test.cljc  ← generative property tests
+        ├── cli_test.clj        ← bin/cedn tests (bb test:cli)
         └── xplatform_test.cljc ← cross-platform byte comparison tests
 ```
 
@@ -450,7 +455,7 @@ ECMAScript implementation for 20,000+ doubles.
 ```clojure
 (require '[cedn.core :as cedn])
 
-cedn/version  ;=> "1.5.0"
+cedn/version  ;=> "1.5.1"
 
 ;; Canonicalize to bytes (for signing/hashing)
 (cedn/canonical-bytes {:a 1 :b 2})
@@ -511,9 +516,11 @@ bb test:bb           # Babashka
 bb test:nbb          # nbb (Node.js)
 bb test:cljs         # shadow-cljs
 bb test:scittle      # Scittle (headless Chromium via Playwright)
-bb test:scittle-cdn  # Scittle loading from jsdelivr CDN
+bb test:scittle-cdn  # Scittle loading from jsdelivr CDN (optional ref, default main)
 bb test:jar          # JVM smoke test against installed Maven JAR
-bb test:nbb-dep      # nbb smoke test via git/local dep (nbb.edn pattern)
+bb test:nbb-dep      # nbb smoke test via :local/root dep (nbb.edn pattern)
+bb test:nbb-git      # nbb smoke test via the README's git coordinates (network)
+bb test:published    # README's pinned CDN tag + test:nbb-git (network)
 
 # Pretty-print EDN without decoding (preserves canonical token forms)
 bb pprint file.edn          # from file
@@ -527,13 +534,13 @@ bb fmt:fix      # cljfmt fix
 bb gen:xref       # print cross-platform hex reference data
 bb gen:compliance # verify all platforms agree, confirm golden file
 
-# Run everything (JVM + bb + nbb + cljs + scittle + lint + fmt)
+# Run everything (JVM + bb + nbb + cljs + scittle + cli + lint + fmt)
 bb test:all
 
 # Build & distribute
 bb build:scittle   # → dist/cedn.cljc (Scittle browser bundle)
 bb jar             # → target/cedn.jar
-bb install         # → ~/.m2/repository/com/github/franks42/cedn/1.2.0/
+bb install         # → ~/.m2/repository/com/github/franks42/cedn/<version>/
 
 # Scittle (browser, automated via Playwright — auto-rebuilds dist/cedn.cljc)
 bb test:scittle
@@ -548,7 +555,7 @@ bb tasks
 
 ```bash
 clojure -T:build jar       # → target/cedn.jar
-clojure -T:build install   # → ~/.m2/repository/com/github/franks42/cedn/1.2.0/
+clojure -T:build install   # → ~/.m2/repository/com/github/franks42/cedn/<version>/
 clojure -T:build deploy    # → Clojars (needs CLOJARS_USERNAME/PASSWORD)
 clojure -T:build clean     # remove target/
 ```
@@ -638,12 +645,12 @@ cedn.gen
 ### Babashka (bb)
 Done. Pure Clojure `ecma-reformat` serves both JVM and bb.
 `compare-strings` uses `.codePointAt` loop on bb (`:bb` reader conditional).
-Full test suite passes (70 tests, 1,294 assertions).
+Full test suite passes (counts under Current Status).
 Cross-platform reference test verifies bb output matches JVM for 1,051 doubles.
 
 ### nbb (Node.js Babashka)
 Done. Exercises `:cljs` reader conditional branches on the JS runtime via SCI.
-Full test suite passes (66 tests, 225 assertions).
+Full test suite passes (counts under Current Status).
 
 Key CLJS fixes:
 - `emit-string-char`: `(int ch)` → `.charCodeAt` (JS `(int "h")` returns 0)
@@ -661,7 +668,7 @@ Platform-legitimate test differences (guarded with reader conditionals):
 ### shadow-cljs (full ClojureScript)
 Done. Uses `:node-test` target with shadow-cljs. Includes property tests
 (4 × 200 iterations) which caught the negative-zero round-trip issue.
-Full test suite passes (70 tests, 229 assertions).
+Full test suite passes (counts under Current Status).
 
 Additional CLJS fixes for shadow-cljs:
 - `gen/large-integer*` range limited to `Number.MAX_SAFE_INTEGER` (2^53-1)
@@ -686,7 +693,7 @@ Browser usage (CDN):
 ```html
 <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"></script>
 <script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc"></script>
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.1/dist/cedn.cljc"></script>
 ```
 
 ## What's NOT Built Yet

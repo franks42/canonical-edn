@@ -62,8 +62,8 @@
                 :task (do (run 'build:scittle)
                           (shell "node" "test/run-scittle.mjs"))}
 
-  test:scittle-cdn {:doc  "Run Scittle tests loading CEDN from jsdelivr CDN"
-                    :task (shell "node" "test/run-scittle-cdn.mjs")}
+  test:scittle-cdn {:doc  "Run Scittle tests loading CEDN from jsdelivr CDN (optional git ref, default main)"
+                    :task (apply shell "node" "test/run-scittle-cdn.mjs" *command-line-args*)}
 
   jar       {:doc  "Build JAR (clojure -T:build jar)"
              :task (shell "clojure" "-T:build" "jar")}
@@ -92,6 +92,36 @@
                         (shell {:dir dir}
                                "nbb" "-cp" (str root "/test")
                                "-e" "(require 'nbb-smoke-test)"))}
+
+  test:nbb-git {:doc  "Smoke-test the README's nbb.edn git coordinates, with an empty gitlibs cache (network)"
+                ;; test:nbb-dep uses :local/root, so it cannot catch a wrong
+                ;; tag or sha in the snippet users actually copy.
+                :requires ([babashka.fs :as fs])
+                :task (let [readme (slurp "README.md")
+                            deps   (second (re-find (re-pattern "(?s)### nbb \\(nbb\\.edn\\).*?```clojure\n(.*?)```")
+                                                    readme))
+                            tmp    (str (fs/create-temp-dir {:prefix "cedn-nbb-git-"}))
+                            root   (System/getProperty "user.dir")]
+                        (when-not deps
+                          (println "ERROR: no nbb.edn block found in README.md")
+                          (System/exit 1))
+                        (spit (str tmp "/nbb.edn") deps)
+                        (print deps)
+                        (flush)
+                        (try
+                          (shell {:dir tmp :extra-env {"GITLIBS" (str tmp "/gitlibs")}}
+                                 "nbb" "-cp" (str root "/test")
+                                 "-e" "(require 'nbb-smoke-test)")
+                          (finally (fs/delete-tree tmp))))}
+
+  test:published {:doc  "Test what the README tells users to load: its Scittle CDN ref and nbb git dep (network)"
+                  :task (let [ref (second (re-find (re-pattern "cdn\\.jsdelivr\\.net/gh/franks42/canonical-edn@([^/]+)/")
+                                                   (slurp "README.md")))]
+                          (when-not ref
+                            (println "ERROR: no jsdelivr cedn URL found in README.md")
+                            (System/exit 1))
+                          (shell "node" "test/run-scittle-cdn.mjs" ref)
+                          (run 'test:nbb-git))}
 
   pprint    {:doc  "Pretty-print EDN without decoding (file, string, or stdin)"
              :task (let [arg   (first *command-line-args*)
