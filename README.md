@@ -174,8 +174,8 @@ nbb cannot read JAR files, so use a git dependency instead:
 ```clojure
 {:deps {com.github.franks42/cedn
         {:git/url "https://github.com/franks42/canonical-edn"
-         :git/tag "v1.5.1"
-         :git/sha "359a9bc"}}}
+         :git/tag "v1.5.2"
+         :git/sha "6b78795"}}}
 ```
 
 ### Scittle (Browser)
