@@ -12,6 +12,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+### Changed
+
+- `bb lint` and `bb fmt` cover every Clojure file in the repo (`bin/cedn`,
+  `build.clj`, `bb.edn`, `deps.edn`, `shadow-cljs.edn` as well as `src`
+  and `test`). `bb.edn` had drifted from cljfmt's layout and was
+  reformatted (whitespace only).
+
 ## [1.5.2] — 2026-09-22 — Runtimes and published-artifact tests
 
 No library code changes: `src/` is identical to 1.5.1 apart from the

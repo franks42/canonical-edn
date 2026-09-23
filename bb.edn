@@ -13,17 +13,17 @@
                                 'cedn.token-test     'cedn.reader-test
                                 'cedn.xplatform-test)
                        (let [r (clojure.test/run-tests
-                                 'cedn.number-test    'cedn.order-test
-                                 'cedn.core-test      'cedn.emit-test
-                                 'cedn.error-test     'cedn.schema-test
-                                 'cedn.token-test     'cedn.reader-test
-                                 'cedn.xplatform-test)]
+                                'cedn.number-test    'cedn.order-test
+                                'cedn.core-test      'cedn.emit-test
+                                'cedn.error-test     'cedn.schema-test
+                                'cedn.token-test     'cedn.reader-test
+                                'cedn.xplatform-test)]
                          (when (pos? (+ (:fail r) (:error r)))
                            (System/exit 1))))}
 
   test:nbb  {:doc  "Run nbb (Node.js) tests"
              :task (shell "nbb" "-cp" "src:test" "-e"
-                    "(require (quote cljs.test)
+                          "(require (quote cljs.test)
                               (quote cedn.error-test)    (quote cedn.number-test)
                               (quote cedn.order-test)    (quote cedn.schema-test)
                               (quote cedn.emit-test)     (quote cedn.core-test)
@@ -54,7 +54,7 @@
                          (spit out
                                (str header
                                     (clojure.string/join "\n\n"
-                                      (map slurp sources))
+                                                         (map slurp sources))
                                     "\n"))
                          (println "Wrote" out))}
 
@@ -133,14 +133,20 @@
                             "clojure" "-M:pprint" "-e"
                             "(require '[zprint.core :as zp]) (print (zp/zprint-file-str (slurp *in*) \"\" {:map {:sort? false}}))"))}
 
+  ;; Every Clojure file in the repo except generated dist/ and the
+  ;; historical design sketches in docs/.
   lint      {:doc  "Run clj-kondo linter"
-             :task (shell "clj-kondo" "--lint" "src" "test")}
+             :task (do (shell "clj-kondo" "--lint" "src" "test" "build.clj")
+                       ;; no .clj extension, so name the language explicitly
+                       (shell "clj-kondo" "--lang" "clj" "--lint" "bin/cedn"))}
 
   fmt       {:doc  "Check cljfmt formatting"
-             :task (shell "cljfmt" "check" "src" "test")}
+             :task (shell "cljfmt" "check" "src" "test" "bin/cedn" "build.clj"
+                          "bb.edn" "deps.edn" "shadow-cljs.edn")}
 
   fmt:fix   {:doc  "Fix cljfmt formatting"
-             :task (shell "cljfmt" "fix" "src" "test")}
+             :task (shell "cljfmt" "fix" "src" "test" "bin/cedn" "build.clj"
+                          "bb.edn" "deps.edn" "shadow-cljs.edn")}
 
   gen:xref  {:doc  "Print cross-platform hex reference data"
              :task (do (require 'cedn.core 'cedn.xplatform-test)
@@ -149,118 +155,118 @@
                              cases   (deref (resolve 'cedn.xplatform-test/xplatform-cases))
                              hex     (fn [bs]
                                        (apply str
-                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
-                                              (seq bs))))]
+                                              (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                                   (seq bs))))]
                          (doseq [[label value _ _] cases]
                            (println (pr-str [label (c-str value) (hex (c-bytes value))])))))}
 
   gen:compliance
-            {:doc  "Verify all platforms agree, then write the golden test vectors file"
-             :task (do (println "=== Generating compliance vectors ===")
-                       (println "Step 1: Run tests on all platforms...")
-                       (run 'test:jvm)
-                       (run 'test:bb)
-                       (run 'test:nbb)
-                       (run 'test:cljs)
-                       (println "\nStep 2: All platforms agree. Writing golden file...")
-                       (require 'cedn.core 'cedn.xplatform-test 'clojure.pprint 'clojure.edn)
-                       (let [c-str   (resolve 'cedn.core/canonical-str)
-                             c-bytes (resolve 'cedn.core/canonical-bytes)
-                             readers (deref (resolve 'cedn.core/readers))
-                             vector' (deref (resolve 'cedn.xplatform-test/cedn-p-compliance-vector))
-                             cases   (deref (resolve 'cedn.xplatform-test/xplatform-cases))
-                             pprint  (resolve 'clojure.pprint/pprint)
-                             margin  (resolve 'clojure.pprint/*print-right-margin*)
-                             hex     (fn [bs]
-                                       (apply str
-                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
-                                              (seq bs))))
-                             rank    (deref (resolve 'cedn.core/rank))
+  {:doc  "Verify all platforms agree, then write the golden test vectors file"
+   :task (do (println "=== Generating compliance vectors ===")
+             (println "Step 1: Run tests on all platforms...")
+             (run 'test:jvm)
+             (run 'test:bb)
+             (run 'test:nbb)
+             (run 'test:cljs)
+             (println "\nStep 2: All platforms agree. Writing golden file...")
+             (require 'cedn.core 'cedn.xplatform-test 'clojure.pprint 'clojure.edn)
+             (let [c-str   (resolve 'cedn.core/canonical-str)
+                   c-bytes (resolve 'cedn.core/canonical-bytes)
+                   readers (deref (resolve 'cedn.core/readers))
+                   vector' (deref (resolve 'cedn.xplatform-test/cedn-p-compliance-vector))
+                   cases   (deref (resolve 'cedn.xplatform-test/xplatform-cases))
+                   pprint  (resolve 'clojure.pprint/pprint)
+                   margin  (resolve 'clojure.pprint/*print-right-margin*)
+                   hex     (fn [bs]
+                             (apply str
+                                    (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                         (seq bs))))
+                   rank    (deref (resolve 'cedn.core/rank))
                              ;; Print maps and sets in canonical order so the
                              ;; file is stable across runs and platforms.
-                             bytes?' (fn [v] (bytes? v))
-                             hexstr  (fn [bs]
-                                       (apply str
-                                         (map (fn [b] (format "%02x" (bit-and (int b) 255)))
-                                              (seq bs))))
-                             ordered (fn ordered [v]
-                                       (cond
+                   bytes?' (fn [v] (bytes? v))
+                   hexstr  (fn [bs]
+                             (apply str
+                                    (map (fn [b] (format "%02x" (bit-and (int b) 255)))
+                                         (seq bs))))
+                   ordered (fn ordered [v]
+                             (cond
                                          ;; byte arrays have no EDN print form:
                                          ;; write them as #bytes "hex"
-                                         (bytes?' v) (tagged-literal 'bytes (hexstr v))
-                                         (map? v) (into (sorted-map-by rank)
-                                                        (map (fn [[k x]] [(ordered k) (ordered x)]) v))
-                                         (set? v) (into (sorted-set-by rank) (map ordered v))
-                                         (vector? v) (mapv ordered v)
-                                         (seq? v) (apply list (map ordered v))
-                                         :else v))
+                               (bytes?' v) (tagged-literal 'bytes (hexstr v))
+                               (map? v) (into (sorted-map-by rank)
+                                              (map (fn [[k x]] [(ordered k) (ordered x)]) v))
+                               (set? v) (into (sorted-set-by rank) (map ordered v))
+                               (vector? v) (mapv ordered v)
+                               (seq? v) (apply list (map ordered v))
+                               :else v))
                              ;; pr prints most control characters raw; a golden
                              ;; file must not carry invisible bytes.
-                             escape  (fn [text]
-                                       (apply str
-                                         (map (fn [c]
-                                                (let [n (int c)]
-                                                  (if (or (and (< n 0x20)
-                                                               (not= n 0x0a))
-                                                          (= n 0x7f))
-                                                    (format "\\u%04x" n)
-                                                    c)))
-                                              text)))
-                             pp      (fn [v] (escape
-                                               (with-out-str
-                                                 (with-bindings {margin 74}
-                                                   (pprint (ordered v))))))
-                             indent  (fn [text pad]
-                                       (clojure.string/join "\n"
-                                         (map-indexed (fn [i line]
-                                                        (if (or (zero? i) (= "" line))
-                                                          line
-                                                          (str pad line)))
-                                                      (clojure.string/split-lines text))))
-                             out     "test/cedn/cedn-p-compliance-vectors.edn"
-                             header  (str ";; CEDN-P Compliance Test Vectors\n"
-                                          ";; Generated by `bb gen:compliance`. DO NOT EDIT by hand.\n"
-                                          ";; All CEDN-P implementations must produce these exact outputs.\n"
-                                          ";;\n"
-                                          ";; Format:\n"
-                                          ";;   :compliance — [input-value expected-canonical-str expected-utf8-hex]\n"
-                                          ";;   :vectors    — [[label input-value expected-str expected-hex] ...]\n"
-                                          ";;\n"
-                                          ";; Usage (any platform):\n"
-                                          ";;   (let [[input expected-str expected-hex]\n"
-                                          ";;         (:compliance (edn/read-string (slurp file)))]\n"
-                                          ";;     (assert (= expected-str (canonical-str input)))\n"
-                                          ";;     (assert (= expected-hex (bytes->hex (canonical-bytes input)))))\n\n")
-                             entry   (fn [[label value _ _]]
-                                       (str "  [" (pr-str label) " "
-                                            (indent (clojure.string/trim (pp value)) "   ") "\n"
-                                            "   " (pr-str (c-str value)) "\n"
-                                            "   " (pr-str (hex (c-bytes value))) "]"))
-                             content (str header
-                                          "{:compliance\n"
-                                          " [" (indent (clojure.string/trim (pp vector')) "  ") "\n"
-                                          "  " (pr-str (c-str vector')) "\n"
-                                          "  " (pr-str (hex (c-bytes vector'))) "]\n\n"
-                                          " :vectors\n"
-                                          " [" (clojure.string/triml
-                                                 (clojure.string/join "\n" (map entry cases)))
-                                          "]}\n")]
-                         (spit out content)
+                   escape  (fn [text]
+                             (apply str
+                                    (map (fn [c]
+                                           (let [n (int c)]
+                                             (if (or (and (< n 0x20)
+                                                          (not= n 0x0a))
+                                                     (= n 0x7f))
+                                               (format "\\u%04x" n)
+                                               c)))
+                                         text)))
+                   pp      (fn [v] (escape
+                                    (with-out-str
+                                      (with-bindings {margin 74}
+                                        (pprint (ordered v))))))
+                   indent  (fn [text pad]
+                             (clojure.string/join "\n"
+                                                  (map-indexed (fn [i line]
+                                                                 (if (or (zero? i) (= "" line))
+                                                                   line
+                                                                   (str pad line)))
+                                                               (clojure.string/split-lines text))))
+                   out     "test/cedn/cedn-p-compliance-vectors.edn"
+                   header  (str ";; CEDN-P Compliance Test Vectors\n"
+                                ";; Generated by `bb gen:compliance`. DO NOT EDIT by hand.\n"
+                                ";; All CEDN-P implementations must produce these exact outputs.\n"
+                                ";;\n"
+                                ";; Format:\n"
+                                ";;   :compliance — [input-value expected-canonical-str expected-utf8-hex]\n"
+                                ";;   :vectors    — [[label input-value expected-str expected-hex] ...]\n"
+                                ";;\n"
+                                ";; Usage (any platform):\n"
+                                ";;   (let [[input expected-str expected-hex]\n"
+                                ";;         (:compliance (edn/read-string (slurp file)))]\n"
+                                ";;     (assert (= expected-str (canonical-str input)))\n"
+                                ";;     (assert (= expected-hex (bytes->hex (canonical-bytes input)))))\n\n")
+                   entry   (fn [[label value _ _]]
+                             (str "  [" (pr-str label) " "
+                                  (indent (clojure.string/trim (pp value)) "   ") "\n"
+                                  "   " (pr-str (c-str value)) "\n"
+                                  "   " (pr-str (hex (c-bytes value))) "]"))
+                   content (str header
+                                "{:compliance\n"
+                                " [" (indent (clojure.string/trim (pp vector')) "  ") "\n"
+                                "  " (pr-str (c-str vector')) "\n"
+                                "  " (pr-str (hex (c-bytes vector'))) "]\n\n"
+                                " :vectors\n"
+                                " [" (clojure.string/triml
+                                      (clojure.string/join "\n" (map entry cases)))
+                                "]}\n")]
+               (spit out content)
                          ;; Read it back and re-verify: a golden file that
                          ;; does not load, or disagrees with the code that
                          ;; wrote it, is worse than no golden file.
-                         (let [{[input exp-str exp-hex] :compliance
-                                vs :vectors} (clojure.edn/read-string
-                                               {:readers readers} (slurp out))]
-                           (assert (= exp-str (c-str input)) "composite string mismatch")
-                           (assert (= exp-hex (hex (c-bytes input))) "composite hex mismatch")
-                           (assert (= (count cases) (count vs)) "vector count mismatch")
-                           (doseq [[label value exp-s exp-h] vs]
-                             (assert (= exp-s (c-str value)) (str label " string mismatch"))
-                             (assert (= exp-h (hex (c-bytes value))) (str label " hex mismatch"))))
-                         (println "Wrote" out)
-                         (println "  per-value vectors:" (count cases))
-                         (println "  re-read and verified: all platforms produced identical output.")))}
+               (let [{[input exp-str exp-hex] :compliance
+                      vs :vectors} (clojure.edn/read-string
+                                    {:readers readers} (slurp out))]
+                 (assert (= exp-str (c-str input)) "composite string mismatch")
+                 (assert (= exp-hex (hex (c-bytes input))) "composite hex mismatch")
+                 (assert (= (count cases) (count vs)) "vector count mismatch")
+                 (doseq [[label value exp-s exp-h] vs]
+                   (assert (= exp-s (c-str value)) (str label " string mismatch"))
+                   (assert (= exp-h (hex (c-bytes value))) (str label " hex mismatch"))))
+               (println "Wrote" out)
+               (println "  per-value vectors:" (count cases))
+               (println "  re-read and verified: all platforms produced identical output.")))}
 
   test:cli  {:doc  "Run CLI integration tests (shells out to bin/cedn)"
              :task (do (require 'clojure.test 'cedn.cli-test)
@@ -269,44 +275,44 @@
                            (System/exit 1))))}
 
   test:cli-release
-            {:doc  "Install lib to local m2, then run bin/cedn from a clean
+  {:doc  "Install lib to local m2, then run bin/cedn from a clean
                     temp dir (no adjacent src/) so it goes through add-deps
                     and resolves cedn from Maven. Catches release-mode bugs."
-             :task (do (run 'install)
-                       (let [tmp (str (System/getProperty "java.io.tmpdir")
-                                      "/cedn-cli-release-test")
-                             root (System/getProperty "user.dir")]
-                         (.mkdirs (java.io.File. tmp))
-                         (shell "cp" (str root "/bin/cedn") tmp)
-                         (let [r (shell {:dir tmp :out :string} "./cedn" "--edn" "{:b 2 :a 1}")
-                               out (:out r)]
-                           (if (= "{:a 1 :b 2}\n" out)
-                             (println "OK: release-mode CLI resolved cedn from local m2 and produced canonical output")
-                             (do (println "FAIL: release-mode CLI produced:" (pr-str out))
-                                 (System/exit 1))))))}
+   :task (do (run 'install)
+             (let [tmp (str (System/getProperty "java.io.tmpdir")
+                            "/cedn-cli-release-test")
+                   root (System/getProperty "user.dir")]
+               (.mkdirs (java.io.File. tmp))
+               (shell "cp" (str root "/bin/cedn") tmp)
+               (let [r (shell {:dir tmp :out :string} "./cedn" "--edn" "{:b 2 :a 1}")
+                     out (:out r)]
+                 (if (= "{:a 1 :b 2}\n" out)
+                   (println "OK: release-mode CLI resolved cedn from local m2 and produced canonical output")
+                   (do (println "FAIL: release-mode CLI produced:" (pr-str out))
+                       (System/exit 1))))))}
 
   release-check
-            {:doc  "Refuse to release a non-stable version. Run before `git tag`."
-             :task (let [src (slurp "bin/cedn")
-                         m   (re-find (re-pattern "\\(def version\\s+\"([^\"]+)\"") src)
-                         ver (second m)]
-                     (cond
-                       (nil? ver)
-                       (do (println "ERROR: couldn't parse version from bin/cedn")
-                           (System/exit 1))
+  {:doc  "Refuse to release a non-stable version. Run before `git tag`."
+   :task (let [src (slurp "bin/cedn")
+               m   (re-find (re-pattern "\\(def version\\s+\"([^\"]+)\"") src)
+               ver (second m)]
+           (cond
+             (nil? ver)
+             (do (println "ERROR: couldn't parse version from bin/cedn")
+                 (System/exit 1))
 
-                       (re-find (re-pattern "(?i)snapshot|alpha|beta|rc") ver)
-                       (do (println "ERROR: bin/cedn version is" (str "\"" ver "\"")
-                                    "— refusing to release a non-stable version.")
-                           (System/exit 1))
+             (re-find (re-pattern "(?i)snapshot|alpha|beta|rc") ver)
+             (do (println "ERROR: bin/cedn version is" (str "\"" ver "\"")
+                          "— refusing to release a non-stable version.")
+                 (System/exit 1))
 
-                       (not (re-matches (re-pattern "\\d+\\.\\d+\\.\\d+") ver))
-                       (do (println "ERROR: version" (str "\"" ver "\"")
-                                    "is not a semver triple X.Y.Z")
-                           (System/exit 1))
+             (not (re-matches (re-pattern "\\d+\\.\\d+\\.\\d+") ver))
+             (do (println "ERROR: version" (str "\"" ver "\"")
+                          "is not a semver triple X.Y.Z")
+                 (System/exit 1))
 
-                       :else
-                       (println "OK: version is" (str "\"" ver "\""))))}
+             :else
+             (println "OK: version is" (str "\"" ver "\""))))}
 
   test:all  {:doc  "Run all tests + lint + format check"
              :task (do (run 'test:jvm)

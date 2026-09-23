@@ -40,7 +40,16 @@ ClojureScript 1.12.145, shadow-cljs 3.5.3, Scittle 0.8.33, CI Node 26); spec hea
 `bb test:scittle-cdn [ref]`, `bb test:nbb-git` and `bb test:published`
 test what the README tells users to load, weekly via
 `.github/workflows/published.yml`.  `bb test:scittle-cdn` with no
-argument still tests `@main`.
+argument still tests `@main`.  1.5.2 was verified from outside: full
+JVM and bb suites against the Clojars JAR, the release asset, and
+`bb test:published`; jsdelivr and JAR sources are byte-identical to the
+tag.
+
+Since 1.5.2 (unreleased, tooling only): `bb lint` and `bb fmt` cover
+every Clojure file — `src`, `test`, `bin/cedn`, `build.clj`, `bb.edn`,
+`deps.edn`, `shadow-cljs.edn` — not just `src` and `test`.  `bb.edn` had
+drifted (whitespace only, since v1.3.0) and was reformatted.  Excluded:
+generated `dist/` and the historical sketches in `docs/`.
 
 ### Environment notes (macOS, this laptop — new machine, Sept 2026)
 
@@ -186,7 +195,7 @@ Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `cloj
 | Cross-platform bytes | Done | 40 values × 2 checks (canonical-str + bytes hex): proves all 5 platforms produce identical output for the same inputs. Compliance test vectors stored in `cedn-p-compliance-vectors.edn` (IETF RFC-style). |
 
 **Test results (tests / assertions, 2026-09-22): JVM 145 / 21,825, bb 112 / 1,726, nbb 106 / 633, shadow-cljs 122 / 661, Scittle 69 / 69, Scittle-CDN 28 / 28, CLI 22 / 49 — 0 failures on all platforms.**
-**Lint: 0 clj-kondo errors/warnings, cljfmt clean.**
+**Lint: 0 clj-kondo errors/warnings, cljfmt clean — on every Clojure file (see `bb lint` / `bb fmt`).**
 
 Design decisions and project state live in this file and the CHANGELOG.
 
@@ -608,13 +617,14 @@ node test/run-scittle.mjs
 # Prerequisite (one-time): npm install && npx playwright install chromium
 
 # 6. Linting — must report 0 errors, 0 warnings
-clj-kondo --lint src test
+clj-kondo --lint src test build.clj
+clj-kondo --lang clj --lint bin/cedn   # no extension: name the language
 
 # 7. Formatting — must report all files correct
-cljfmt check src test
+cljfmt check src test bin/cedn build.clj bb.edn deps.edn shadow-cljs.edn
 
 # Auto-fix formatting issues:
-cljfmt fix src test
+cljfmt fix src test bin/cedn build.clj bb.edn deps.edn shadow-cljs.edn
 ```
 
 ## Architecture Notes
