@@ -17,6 +17,69 @@ or any authorization framework.  Kex will depend on it.
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
 
+## Session Handoff (2026-09-22)
+
+Everything from the 2026-09 review is closed and released (v1.4.0,
+v1.5.0, v1.5.1 — see decisions 6–13 and the CHANGELOG).  `main` is
+clean, CI is green, all five platforms plus the CLI pass locally.
+
+### Open items, roughly in priority order
+
+1. **README pins the browser build to `@main`, not a release.**
+   `cdn.jsdelivr.net/gh/franks42/canonical-edn@main/dist/cedn.cljc`
+   means browser users silently track unreleased `main`.  For a library
+   whose output feeds signatures, that should be `@v1.5.1`.  Note
+   `test/scittle-cdn-test.html` and `bb test:scittle-cdn` also fetch
+   `@main`; decide whether the test follows `main` (catches CDN staleness
+   before release) or the pinned tag (matches what users load), and make
+   README and test agree.
+2. **The spec's Internet-Draft header is stale** — "February 2026 /
+   Expires: August 2026" (`docs/cedn-spec.md`, line 1).  Either refresh
+   the dates or drop the I-D framing if it is never going to IETF.
+3. **`inspect` returns `:sha-256 nil` on CLJS.**  `SubtleCrypto.digest`
+   is async; would need an async variant or a bundled sync SHA-256.
+4. **`bb test:scittle-cdn` is not in CI** (it hits the network).  Worth
+   a scheduled run rather than a per-push one.
+5. **CEDN-R** stays unimplemented and actively rejected (decision 6).
+
+### Environment notes (macOS, this laptop — new machine, Sept 2026)
+
+- **`clojure` vs `clj`**: Homebrew's `clojure` wrapper pins its own
+  `JAVA_HOME`, so `JAVA_HOME=... clojure ...` does NOT switch JDKs — it
+  silently runs the brew JDK.  To test on another JDK, invoke that JDK's
+  `java` directly with `-cp "$(clojure -Spath -M:test)" clojure.main`.
+  Scripts must call `clojure`, not `clj` (`clj` needs rlwrap, absent on
+  CI runners).
+- **Playwright**: `npx playwright install` downloaded Chromium fine but
+  then hung indefinitely unpacking it (0% CPU).  Workaround: kill it and
+  extract the zip from the temp dir with `ditto -x -k`, then `touch
+  INSTALLATION_COMPLETE`.  Headless runs also need the separate
+  `chromium_headless_shell-<rev>` build.
+- **Scittle/sci gaps**: no `cljs.core/uuid`, no `UUID.` constructor (it
+  does have `random-uuid`, `uuid?`).  `cedn.reader` builds UUIDs through
+  the constructor of a `random-uuid` instance because of this.  Probe
+  Scittle behaviour with a throwaway page + Playwright rather than
+  assuming parity with shadow-cljs/nbb.
+- **CLJS `array-map`** can produce a map with duplicate `=` keys, which
+  cedn correctly rejects; do not build test maps that rely on it
+  deduplicating.
+- Tooling present: `bb`, `clojure`, JDK 25 (sdkman), `nbb`, `node`,
+  `gh` (authenticated, git credential helper), Playwright browsers.
+
+### Release procedure (as executed for 1.4.0 / 1.5.0 / 1.5.1)
+
+1. `bb test:all`, plus `bb test:jar` and `bb test:cli-release`.
+2. Bump `version` in `src/cedn/core.cljc`, `bin/cedn`, `build.clj`
+   (`version-test` checks they agree; `release.yml` checks them against
+   the tag).  `bb build:scittle` to refresh `dist/`.
+3. CHANGELOG: turn `[Unreleased]` into the new version section.
+4. Commit, push, wait for CI green, then `git tag -a vX.Y.Z` and push
+   the tag — that triggers the Clojars deploy and GitHub Release.
+5. Afterwards, point the README's nbb `:git/sha` at the tagged commit in
+   a follow-up commit (the tagged commit cannot contain its own sha).
+6. Verify from outside: Clojars JAR 200, release asset downloads and
+   runs with an empty `~/.m2`, git dep resolves.
+
 ### v1.5.1 — documentation
 
 README rewritten around the two properties that define the library:
