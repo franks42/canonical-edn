@@ -410,7 +410,7 @@ cedn/
 ```clojure
 ;; deps.edn
 {:paths ["src"]
- :deps {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :deps {org.clojure/clojure {:mvn/version "1.12.6"}}
  :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {io.github.cognitect-labs/test-runner
@@ -424,8 +424,8 @@ cedn/
          :main-opts   ["-m" "cognitect.test-runner" "-r" "cedn\\..*-test$"]
          :exec-fn     cognitect.test-runner.api/test
          :exec-args   {:patterns ["cedn\\..*-test$"]}}
-  :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.11.132"}
-                      thheller/shadow-cljs {:mvn/version "2.28.23"}}}
+  :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.12.145"}
+                      thheller/shadow-cljs {:mvn/version "3.5.3"}}}
   :cljs-test {:extra-paths ["test"]
               :extra-deps {org.clojure/test.check {:mvn/version "1.1.1"}}}
   :pprint {:extra-deps {zprint/zprint {:mvn/version "1.3.0"}}}
@@ -677,7 +677,7 @@ Additional CLJS fixes for shadow-cljs:
 
 ### Scittle (browser)
 Done. Single concatenated bundle `dist/cedn.cljc` loaded via
-`<script type="application/x-scittle">` with Scittle v0.8.31 CDN.
+`<script type="application/x-scittle">` with Scittle v0.8.33 CDN.
 69 tests covering all modules pass in headless Chromium (Playwright).
 
 Scittle-specific fixes (SCI symbols not available):
@@ -691,7 +691,7 @@ CDN smoke test: `bb test:scittle-cdn` (loads from jsdelivr, 28 tests).
 
 Browser usage (CDN):
 ```html
-<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.33/dist/scittle.js"></script>
 <script type="application/x-scittle"
         src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.1/dist/cedn.cljc"></script>
 ```

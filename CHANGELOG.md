@@ -28,6 +28,12 @@ release.)
 - `bb test:published` runs both against what the README tells users to
   load, and `.github/workflows/published.yml` runs it weekly.
 
+### Dependencies
+
+- Clojure 1.12.6 (from 1.12.0; the JAR's only dependency, so its pom now
+  names 1.12.6), ClojureScript 1.12.145 (from 1.11.132), shadow-cljs 3.5.3
+  (from 2.28.23), Scittle 0.8.33 (from 0.8.31, also in the README snippet).
+
 ### Fixed
 
 - The Playwright runners passed `{timeout}` as `waitForFunction`'s page

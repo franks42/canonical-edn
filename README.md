@@ -181,7 +181,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 ### Scittle (Browser)
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.31/dist/scittle.js"
+<script src="https://cdn.jsdelivr.net/npm/scittle@0.8.33/dist/scittle.js"
         type="application/javascript"></script>
 <script type="application/x-scittle"
         src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.1/dist/cedn.cljc"></script>
