@@ -12,12 +12,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+## [1.6.0] — 2026-09-23 — Naming: `check`, `throw-*`
+
+Follows the naming convention shared with uuidv7, nacljc and signet: a
+trailing `!` marks a function that writes state that outlives the call,
+never one that "may throw". No behaviour changes; nothing is removed.
+
+### Added
+
+- `cedn.core/check`: returns its argument when it is valid CEDN, and
+  throws otherwise. The exception is the same ex-info `assert!` throws,
+  with `:cedn/error`, `:cedn/value` and `:cedn/path`.
+- `cedn.error/throw-unsupported-type`, `throw-invalid-number`,
+  `throw-out-of-range`, `throw-duplicate-key`, `throw-duplicate-element`,
+  `throw-invalid-unicode`, `throw-reader-error`, `throw-invalid-name`,
+  `throw-invalid-tag-form`: the error constructors under names that say
+  they throw.
+
+### Deprecated
+
+- `cedn.core/assert!`: use `check`. The difference: `check` returns the
+  value, where `assert!` returns nil.
+- The `!`-suffixed `cedn.error` functions (`unsupported-type!` and the
+  rest): use the `throw-*` names.
+
+All of them keep their exact behaviour; a test checks that each alias
+throws the same `:cedn/error` data as its replacement. They will be
+removed in 2.0.
+
 ### Changed
 
 - `bb lint` and `bb fmt` cover every Clojure file in the repo (`bin/cedn`,
   `build.clj`, `bb.edn`, `deps.edn`, `shadow-cljs.edn` as well as `src`
   and `test`). `bb.edn` had drifted from cljfmt's layout and was
   reformatted (whitespace only).
+- CI uses the runner's preinstalled Chrome for the Scittle tests, because
+  Playwright's browser download stalled on GitHub runners: the weekly
+  `published` workflow hung for 6 hours. Every workflow job has a time
+  limit.
 
 ## [1.5.2] — 2026-09-22 — Runtimes and published-artifact tests
 

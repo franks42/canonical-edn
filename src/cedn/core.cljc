@@ -12,7 +12,7 @@
             [clojure.edn :as edn])
   #?(:clj (:import [java.security MessageDigest])))
 
-(def version "1.5.2")
+(def version "1.6.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -70,13 +70,28 @@
   ([value {:keys [profile] :or {profile :cedn-p}}]
    (schema/explain profile value)))
 
-(defn assert!
-  "Like valid?, but throws ex-info on failure."
+(defn check
+  "value, if it is valid CEDN (see valid?); otherwise throws. Pure.
+
+   Throws ex-info \"CEDN type violation\" whose data is explain's result,
+   with :cedn/error naming the violation (e.g. :cedn/unsupported-type),
+   :cedn/value and :cedn/path."
   ([value]
-   (assert! value {}))
+   (check value {}))
   ([value opts]
    (when-let [explanation (explain value opts)]
-     (throw (ex-info "CEDN type violation" explanation)))))
+     (throw (ex-info "CEDN type violation" explanation)))
+   value))
+
+(defn ^{:deprecated "1.6.0"} assert!
+  "Deprecated since 1.6.0: use check (which returns value instead of nil).
+   Like valid?, but throws ex-info on failure; returns nil."
+  ([value]
+   (check value {})
+   nil)
+  ([value opts]
+   (check value opts)
+   nil))
 
 ;; =============================================================
 ;; 3. Inspection

@@ -52,7 +52,7 @@
   encoder would silently replace them, colliding with \"?\" or U+FFFD."
   [^StringBuilder sb s]
   (when-not (token/well-formed-unicode? s)
-    (err/invalid-unicode! s))
+    (err/throw-invalid-unicode s))
   (.append sb \")
   (doseq [ch s]
     (emit-string-char sb ch))
@@ -68,13 +68,13 @@
      (let [inst (cond
                   (instance? Instant v) v
                   (instance? Date v) (.toInstant ^Date v)
-                  :else (err/unsupported-type! v))
+                  :else (err/throw-unsupported-type v))
            zdt (.atZone ^Instant inst ZoneOffset/UTC)
            nano (.getNano ^Instant inst)
            year (.getYear zdt)]
        ;; RFC 3339 has exactly four year digits (§3.12)
        (when-not (<= 0 year 9999)
-         (err/out-of-range! v))
+         (err/throw-out-of-range v))
        (format "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
                year (.getMonthValue zdt) (.getDayOfMonth zdt)
                (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano))))
@@ -85,13 +85,13 @@
      Always 9 fractional digits (ms precision + 6 zeros), UTC Z suffix."
      [v]
      (when-not (instance? js/Date v)
-       (err/unsupported-type! v))
+       (err/throw-unsupported-type v))
      (let [pad (fn [n w] (let [s (str n)]
                            (str (apply str (repeat (- w (count s)) "0")) s)))
            y (.getUTCFullYear v)
            _ (when-not (and (>= y 0) (<= y 9999))
                ;; RFC 3339 has exactly four year digits (§3.12)
-               (err/out-of-range! v))
+               (err/throw-out-of-range v))
            m (inc (.getUTCMonth v))
            d (.getUTCDate v)
            h (.getUTCHours v)
@@ -170,7 +170,7 @@
   [^StringBuilder sb profile s]
   (.append sb "#{")
   (loop [first? true
-         pairs (seq (sort-canonical profile identity err/duplicate-element! s))]
+         pairs (seq (sort-canonical profile identity err/throw-duplicate-element s))]
     (when pairs
       (when-not first?
         (.append sb \space))
@@ -183,7 +183,7 @@
   [^StringBuilder sb profile m]
   (.append sb \{)
   (loop [first? true
-         pairs (seq (sort-canonical profile key err/duplicate-key! m))]
+         pairs (seq (sort-canonical profile key err/throw-duplicate-key m))]
     (when pairs
       (when-not first?
         (.append sb \space))
@@ -213,7 +213,7 @@
       #?(:clj
          (when-not (and (>= (long value) -9223372036854775808)
                         (<= (long value) 9223372036854775807))
-           (err/out-of-range! value)))
+           (err/throw-out-of-range value)))
       (.append sb (str value)))
 
     #?(:clj  (instance? Double value)
@@ -228,7 +228,7 @@
     (let [ns (namespace value)
           n  (name value)]
       (when-let [reason (token/keyword-error value)]
-        (err/invalid-name! value reason))
+        (err/throw-invalid-name value reason))
       (.append sb \:)
       (when ns
         (.append sb ns)
@@ -239,7 +239,7 @@
     (let [ns (namespace value)
           n  (name value)]
       (when-let [reason (token/symbol-error value)]
-        (err/invalid-name! value reason))
+        (err/throw-invalid-name value reason))
       (when ns
         (.append sb ns)
         (.append sb \/))
@@ -284,7 +284,7 @@
       (.append sb \"))
 
     :else
-    (err/unsupported-type! value)))
+    (err/throw-unsupported-type value)))
 
 (defn emit-str
   "Convenience: emit value to a new string."

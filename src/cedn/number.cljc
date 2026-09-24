@@ -121,7 +121,7 @@
   #?(:clj
      (do
        (when (or (Double/isNaN x) (Double/isInfinite x))
-         (err/invalid-number! x))
+         (err/throw-invalid-number x))
        (if (and (zero? x) (neg? (Math/copySign 1.0 x)))
          "0.0"
          (let [s (ecma-reformat (Double/toString x))]
@@ -131,7 +131,7 @@
      :cljs
      (do
        (when (or (js/isNaN x) (not (js/isFinite x)))
-         (err/invalid-number! x))
+         (err/throw-invalid-number x))
        (if (and (zero? x) (neg? (/ 1.0 x)))
          "0.0"
          (let [s (.toString x)]

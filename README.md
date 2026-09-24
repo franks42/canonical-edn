@@ -158,13 +158,13 @@ escaped while `café` stays literal UTF-8.
 ### deps.edn
 
 ```clojure
-com.github.franks42/cedn {:mvn/version "1.5.2"}
+com.github.franks42/cedn {:mvn/version "1.6.0"}
 ```
 
 ### Babashka (bb.edn)
 
 ```clojure
-{:deps {com.github.franks42/cedn {:mvn/version "1.5.2"}}}
+{:deps {com.github.franks42/cedn {:mvn/version "1.6.0"}}}
 ```
 
 ### nbb (nbb.edn)
@@ -184,7 +184,7 @@ nbb cannot read JAR files, so use a git dependency instead:
 <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.33/dist/scittle.js"
         type="application/javascript"></script>
 <script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.5.2/dist/cedn.cljc"></script>
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.6.0/dist/cedn.cljc"></script>
 <script type="application/x-scittle">
 (require '[cedn.core :as cedn])
 (println (cedn/canonical-str {:b 2 :a 1}))
@@ -228,13 +228,13 @@ as `:cedn-p`.
 
 (cedn/valid? value)                 ; → true/false, no canonicalization
 (cedn/explain value)                ; → nil, or a map describing the first problem
-(cedn/assert! value)                ; → nil, or throws
+(cedn/check value)                  ; → value, or throws (assert!, deprecated, returned nil)
 
 (cedn/inspect value)                ; → {:status :ok/:error :canonical … :sha-256 … :errors …}
                                     ;   never throws; :sha-256 is nil on JS
 (sort cedn/rank values)             ; → the spec's total ordering
 cedn/readers                        ; → strict #inst / #uuid / #bytes readers
-cedn/version                        ; → "1.5.2"
+cedn/version                        ; → "1.6.0"
 ```
 
 Reading back canonical text needs `cedn/readers`, which preserve
@@ -252,7 +252,7 @@ precision and reject malformed literals:
 from the [latest release](https://github.com/franks42/canonical-edn/releases/latest):
 
 ```bash
-curl -fsSL -o cedn https://github.com/franks42/canonical-edn/releases/download/v1.5.2/cedn-v1.5.2
+curl -fsSL -o cedn https://github.com/franks42/canonical-edn/releases/download/v1.6.0/cedn-v1.6.0
 chmod +x cedn
 ```
 

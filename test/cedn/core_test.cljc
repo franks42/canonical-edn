@@ -159,8 +159,20 @@
 
 ;; --- assert! ---
 
-(deftest assert-test
-  (is (nil? (cedn/assert! {:a 1})))
+(deftest check-test
+  (testing "returns the value when valid"
+    (is (= {:a 1} (cedn/check {:a 1})))
+    (is (= [1 2] (cedn/check [1 2] {:profile :cedn-p}))))
+  (testing "throws with the explain data (:cedn/error) when not"
+    (is (= :cedn/invalid-number
+           (try (cedn/check ##NaN) :no-throw
+                (catch #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo) e
+                  (:cedn/error (ex-data e))))))))
+
+#_{:clj-kondo/ignore [:deprecated-var]}
+(deftest assert!-is-a-deprecated-alias
+  (is (:deprecated (meta #'cedn/assert!)))
+  (is (nil? (cedn/assert! {:a 1})) "returns nil, exactly as before 1.6.0")
   (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs ExceptionInfo)
                (cedn/assert! ##NaN))))
 
@@ -221,7 +233,7 @@
       #(cedn/canonical-bytes {:a 1} {:profile :cedn-r})
       #(cedn/valid? {:a 1} {:profile :cedn-r})
       #(cedn/explain {:a 1} {:profile :cedn-r})
-      #(cedn/assert! {:a 1} {:profile :cedn-r})
+      #(cedn/check {:a 1} {:profile :cedn-r})
       #(cedn/canonical? "{:a 1}" {:profile :cedn-r})))
   (testing "unknown profiles are rejected too"
     (are [f] (= :cedn/unknown-profile (profile-error f))

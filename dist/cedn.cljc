@@ -2,63 +2,64 @@
 ;; Concatenated CEDN source in dependency order for Scittle/browser.
 
 (ns cedn.error
-  "Error constructors for CEDN canonicalization errors.
+  "Error constructors for CEDN canonicalization errors: throw-* functions,
+  which always throw (a trailing ! would mark a write; these only throw).
 
   All errors are ex-info with a map containing at minimum:
     :cedn/error  — keyword identifying the error class
     :cedn/value  — the offending value
     :cedn/path   — (optional) path to the value in the structure")
 
-(defn unsupported-type!
+(defn throw-unsupported-type
   "Throw :cedn/unsupported-type for a value with no canonical form."
-  ([value]      (unsupported-type! value nil))
+  ([value]      (throw-unsupported-type value nil))
   ([value path] (throw (ex-info "CEDN: unsupported type"
                                 {:cedn/error :cedn/unsupported-type
                                  :cedn/value value
                                  :cedn/type  (type value)
                                  :cedn/path  path}))))
 
-(defn invalid-number!
+(defn throw-invalid-number
   "Throw :cedn/invalid-number for NaN or Infinity."
-  ([value]      (invalid-number! value nil))
+  ([value]      (throw-invalid-number value nil))
   ([value path] (throw (ex-info "CEDN: invalid number"
                                 {:cedn/error :cedn/invalid-number
                                  :cedn/value value
                                  :cedn/path  path}))))
 
-(defn out-of-range!
+(defn throw-out-of-range
   "Throw :cedn/out-of-range for integers outside 64-bit signed range."
-  ([value]      (out-of-range! value nil))
+  ([value]      (throw-out-of-range value nil))
   ([value path] (throw (ex-info "CEDN: integer out of range"
                                 {:cedn/error :cedn/out-of-range
                                  :cedn/value value
                                  :cedn/path  path}))))
 
-(defn duplicate-key!
+(defn throw-duplicate-key
   "Throw :cedn/duplicate-key for maps with equal keys after normalization."
-  ([key]        (duplicate-key! key nil))
+  ([key]        (throw-duplicate-key key nil))
   ([key path]   (throw (ex-info "CEDN: duplicate map key"
                                 {:cedn/error :cedn/duplicate-key
                                  :cedn/value key
                                  :cedn/path  path}))))
 
-(defn duplicate-element!
+(defn throw-duplicate-element
   "Throw :cedn/duplicate-element for sets with equal elements."
-  ([elem]       (duplicate-element! elem nil))
+  ([elem]       (throw-duplicate-element elem nil))
   ([elem path]  (throw (ex-info "CEDN: duplicate set element"
                                 {:cedn/error :cedn/duplicate-element
                                  :cedn/value elem
                                  :cedn/path  path}))))
 
-(defn invalid-unicode!
+(defn throw-invalid-unicode
   "Throw :cedn/invalid-unicode for strings with unpaired surrogates."
-  ([value]      (invalid-unicode! value nil))
+  ([value]      (throw-invalid-unicode value nil))
   ([value path] (throw (ex-info "CEDN: invalid unicode"
                                 {:cedn/error :cedn/invalid-unicode
                                  :cedn/value value
                                  :cedn/path  path}))))
 
-(defn reader-error!
+(defn throw-reader-error
   "Throw :cedn/invalid-tag-form for tagged-literal text that cannot be
   read back as exactly one canonical value."
   [tag text reason]
@@ -68,23 +69,74 @@
                    :cedn/value  text
                    :cedn/reason reason})))
 
-(defn invalid-name!
+(defn throw-invalid-name
   "Throw :cedn/invalid-name for keywords/symbols whose namespace or name
   cannot be serialized as a distinct EDN token."
-  ([value reason]      (invalid-name! value reason nil))
+  ([value reason]      (throw-invalid-name value reason nil))
   ([value reason path] (throw (ex-info "CEDN: invalid keyword or symbol name"
                                        {:cedn/error  :cedn/invalid-name
                                         :cedn/value  value
                                         :cedn/reason reason
                                         :cedn/path   path}))))
 
-(defn invalid-tag-form!
+(defn throw-invalid-tag-form
   "Throw :cedn/invalid-tag-form for tagged literals that can't be canonicalized."
-  ([value]      (invalid-tag-form! value nil))
+  ([value]      (throw-invalid-tag-form value nil))
   ([value path] (throw (ex-info "CEDN: invalid tagged literal"
                                 {:cedn/error :cedn/invalid-tag-form
                                  :cedn/value value
                                  :cedn/path  path}))))
+
+;; ---------------------------------------------------------------------------
+;; Deprecated names (until 1.6.0). A trailing ! marks a function that writes
+;; state; these only throw, so they are now throw-*. The old names keep
+;; their exact behaviour and will be removed in 2.0.
+;; ---------------------------------------------------------------------------
+
+(defn ^{:deprecated "1.6.0"} unsupported-type!
+  "Deprecated since 1.6.0: use throw-unsupported-type."
+  ([value] (throw-unsupported-type value))
+  ([value path] (throw-unsupported-type value path)))
+
+(defn ^{:deprecated "1.6.0"} invalid-number!
+  "Deprecated since 1.6.0: use throw-invalid-number."
+  ([value] (throw-invalid-number value))
+  ([value path] (throw-invalid-number value path)))
+
+(defn ^{:deprecated "1.6.0"} out-of-range!
+  "Deprecated since 1.6.0: use throw-out-of-range."
+  ([value] (throw-out-of-range value))
+  ([value path] (throw-out-of-range value path)))
+
+(defn ^{:deprecated "1.6.0"} duplicate-key!
+  "Deprecated since 1.6.0: use throw-duplicate-key."
+  ([key] (throw-duplicate-key key))
+  ([key path] (throw-duplicate-key key path)))
+
+(defn ^{:deprecated "1.6.0"} duplicate-element!
+  "Deprecated since 1.6.0: use throw-duplicate-element."
+  ([elem] (throw-duplicate-element elem))
+  ([elem path] (throw-duplicate-element elem path)))
+
+(defn ^{:deprecated "1.6.0"} invalid-unicode!
+  "Deprecated since 1.6.0: use throw-invalid-unicode."
+  ([value] (throw-invalid-unicode value))
+  ([value path] (throw-invalid-unicode value path)))
+
+(defn ^{:deprecated "1.6.0"} reader-error!
+  "Deprecated since 1.6.0: use throw-reader-error."
+  [tag text reason]
+  (throw-reader-error tag text reason))
+
+(defn ^{:deprecated "1.6.0"} invalid-name!
+  "Deprecated since 1.6.0: use throw-invalid-name."
+  ([value reason] (throw-invalid-name value reason))
+  ([value reason path] (throw-invalid-name value reason path)))
+
+(defn ^{:deprecated "1.6.0"} invalid-tag-form!
+  "Deprecated since 1.6.0: use throw-invalid-tag-form."
+  ([value] (throw-invalid-tag-form value))
+  ([value path] (throw-invalid-tag-form value path)))
 
 
 (ns cedn.token
@@ -307,7 +359,7 @@
   #?(:clj
      (do
        (when (or (Double/isNaN x) (Double/isInfinite x))
-         (err/invalid-number! x))
+         (err/throw-invalid-number x))
        (if (and (zero? x) (neg? (Math/copySign 1.0 x)))
          "0.0"
          (let [s (ecma-reformat (Double/toString x))]
@@ -317,7 +369,7 @@
      :cljs
      (do
        (when (or (js/isNaN x) (not (js/isFinite x)))
-         (err/invalid-number! x))
+         (err/throw-invalid-number x))
        (if (and (zero? x) (neg? (/ 1.0 x)))
          "0.0"
          (let [s (.toString x)]
@@ -800,7 +852,7 @@
   encoder would silently replace them, colliding with \"?\" or U+FFFD."
   [^StringBuilder sb s]
   (when-not (token/well-formed-unicode? s)
-    (err/invalid-unicode! s))
+    (err/throw-invalid-unicode s))
   (.append sb \")
   (doseq [ch s]
     (emit-string-char sb ch))
@@ -816,13 +868,13 @@
      (let [inst (cond
                   (instance? Instant v) v
                   (instance? Date v) (.toInstant ^Date v)
-                  :else (err/unsupported-type! v))
+                  :else (err/throw-unsupported-type v))
            zdt (.atZone ^Instant inst ZoneOffset/UTC)
            nano (.getNano ^Instant inst)
            year (.getYear zdt)]
        ;; RFC 3339 has exactly four year digits (§3.12)
        (when-not (<= 0 year 9999)
-         (err/out-of-range! v))
+         (err/throw-out-of-range v))
        (format "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
                year (.getMonthValue zdt) (.getDayOfMonth zdt)
                (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano))))
@@ -833,13 +885,13 @@
      Always 9 fractional digits (ms precision + 6 zeros), UTC Z suffix."
      [v]
      (when-not (instance? js/Date v)
-       (err/unsupported-type! v))
+       (err/throw-unsupported-type v))
      (let [pad (fn [n w] (let [s (str n)]
                            (str (apply str (repeat (- w (count s)) "0")) s)))
            y (.getUTCFullYear v)
            _ (when-not (and (>= y 0) (<= y 9999))
                ;; RFC 3339 has exactly four year digits (§3.12)
-               (err/out-of-range! v))
+               (err/throw-out-of-range v))
            m (inc (.getUTCMonth v))
            d (.getUTCDate v)
            h (.getUTCHours v)
@@ -918,7 +970,7 @@
   [^StringBuilder sb profile s]
   (.append sb "#{")
   (loop [first? true
-         pairs (seq (sort-canonical profile identity err/duplicate-element! s))]
+         pairs (seq (sort-canonical profile identity err/throw-duplicate-element s))]
     (when pairs
       (when-not first?
         (.append sb \space))
@@ -931,7 +983,7 @@
   [^StringBuilder sb profile m]
   (.append sb \{)
   (loop [first? true
-         pairs (seq (sort-canonical profile key err/duplicate-key! m))]
+         pairs (seq (sort-canonical profile key err/throw-duplicate-key m))]
     (when pairs
       (when-not first?
         (.append sb \space))
@@ -961,7 +1013,7 @@
       #?(:clj
          (when-not (and (>= (long value) -9223372036854775808)
                         (<= (long value) 9223372036854775807))
-           (err/out-of-range! value)))
+           (err/throw-out-of-range value)))
       (.append sb (str value)))
 
     #?(:clj  (instance? Double value)
@@ -976,7 +1028,7 @@
     (let [ns (namespace value)
           n  (name value)]
       (when-let [reason (token/keyword-error value)]
-        (err/invalid-name! value reason))
+        (err/throw-invalid-name value reason))
       (.append sb \:)
       (when ns
         (.append sb ns)
@@ -987,7 +1039,7 @@
     (let [ns (namespace value)
           n  (name value)]
       (when-let [reason (token/symbol-error value)]
-        (err/invalid-name! value reason))
+        (err/throw-invalid-name value reason))
       (when ns
         (.append sb ns)
         (.append sb \/))
@@ -1032,7 +1084,7 @@
       (.append sb \"))
 
     :else
-    (err/unsupported-type! value)))
+    (err/throw-unsupported-type value)))
 
 (defn emit-str
   "Convenience: emit value to a new string."
@@ -1069,12 +1121,12 @@
   lowercase; uppercase is accepted when reading."
   [s]
   (when-not (string? s)
-    (err/reader-error! "bytes" s "expected a string"))
+    (err/throw-reader-error "bytes" s "expected a string"))
   (when-not (re-matches hex-pattern s)
-    (err/reader-error! "bytes" s
-                       (if (odd? (count s))
-                         "odd number of hex digits"
-                         "not a lowercase or uppercase hex string")))
+    (err/throw-reader-error "bytes" s
+                            (if (odd? (count s))
+                              "odd number of hex digits"
+                              "not a lowercase or uppercase hex string")))
   (let [n (quot (count s) 2)
         digits (fn [i] (subs s (* i 2) (+ (* i 2) 2)))]
     #?(:clj  (let [bs (byte-array n)]
@@ -1106,7 +1158,7 @@
   that is not what the text says (spec §3.13)."
   [s]
   (when-not (and (string? s) (re-matches uuid-pattern s))
-    (err/reader-error! "uuid" s "not a 8-4-4-4-12 hex UUID"))
+    (err/throw-reader-error "uuid" s "not a 8-4-4-4-12 hex UUID"))
   #?(:clj  (java.util.UUID/fromString s)
      ;; lowercased to match canonical form, as cljs.core/uuid does
      :cljs (js/Reflect.construct uuid-ctor #js [(.toLowerCase s) nil])))
@@ -1153,10 +1205,10 @@
   every platform."
   [s]
   (when-not (string? s)
-    (err/reader-error! "inst" s "expected a string"))
+    (err/throw-reader-error "inst" s "expected a string"))
   (let [m (re-matches timestamp-pattern s)]
     (when-not m
-      (err/reader-error! "inst" s "not an RFC 3339 / EDN timestamp"))
+      (err/throw-reader-error "inst" s "not an RFC 3339 / EDN timestamp"))
     (let [[_ y mo d h mi sec frac off-sign off-h off-mi] m
           y      (parse-long* y)
           mo     (if mo (parse-long* mo) 1)
@@ -1167,7 +1219,7 @@
           nanos  (nanos-of frac)
           off-h  (if off-h (parse-long* off-h) 0)
           off-mi (if off-mi (parse-long* off-mi) 0)
-          fail!  (fn [reason] (err/reader-error! "inst" s reason))]
+          fail!  (fn [reason] (err/throw-reader-error "inst" s reason))]
       (cond
         (not (<= 1 mo 12))                 (fail! "month out of range")
         (not (<= 1 d (days-in-month y mo))) (fail! "day out of range for month")
@@ -1207,7 +1259,7 @@
             [clojure.edn :as edn])
   #?(:clj (:import [java.security MessageDigest])))
 
-(def version "1.5.2")
+(def version "1.6.0")
 
 ;; =============================================================
 ;; 1. Core canonicalization
@@ -1265,13 +1317,28 @@
   ([value {:keys [profile] :or {profile :cedn-p}}]
    (schema/explain profile value)))
 
-(defn assert!
-  "Like valid?, but throws ex-info on failure."
+(defn check
+  "value, if it is valid CEDN (see valid?); otherwise throws. Pure.
+
+   Throws ex-info \"CEDN type violation\" whose data is explain's result,
+   with :cedn/error naming the violation (e.g. :cedn/unsupported-type),
+   :cedn/value and :cedn/path."
   ([value]
-   (assert! value {}))
+   (check value {}))
   ([value opts]
    (when-let [explanation (explain value opts)]
-     (throw (ex-info "CEDN type violation" explanation)))))
+     (throw (ex-info "CEDN type violation" explanation)))
+   value))
+
+(defn ^{:deprecated "1.6.0"} assert!
+  "Deprecated since 1.6.0: use check (which returns value instead of nil).
+   Like valid?, but throws ex-info on failure; returns nil."
+  ([value]
+   (check value {})
+   nil)
+  ([value opts]
+   (check value opts)
+   nil))
 
 ;; =============================================================
 ;; 3. Inspection

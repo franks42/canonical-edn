@@ -25,12 +25,12 @@
   lowercase; uppercase is accepted when reading."
   [s]
   (when-not (string? s)
-    (err/reader-error! "bytes" s "expected a string"))
+    (err/throw-reader-error "bytes" s "expected a string"))
   (when-not (re-matches hex-pattern s)
-    (err/reader-error! "bytes" s
-                       (if (odd? (count s))
-                         "odd number of hex digits"
-                         "not a lowercase or uppercase hex string")))
+    (err/throw-reader-error "bytes" s
+                            (if (odd? (count s))
+                              "odd number of hex digits"
+                              "not a lowercase or uppercase hex string")))
   (let [n (quot (count s) 2)
         digits (fn [i] (subs s (* i 2) (+ (* i 2) 2)))]
     #?(:clj  (let [bs (byte-array n)]
@@ -62,7 +62,7 @@
   that is not what the text says (spec §3.13)."
   [s]
   (when-not (and (string? s) (re-matches uuid-pattern s))
-    (err/reader-error! "uuid" s "not a 8-4-4-4-12 hex UUID"))
+    (err/throw-reader-error "uuid" s "not a 8-4-4-4-12 hex UUID"))
   #?(:clj  (java.util.UUID/fromString s)
      ;; lowercased to match canonical form, as cljs.core/uuid does
      :cljs (js/Reflect.construct uuid-ctor #js [(.toLowerCase s) nil])))
@@ -109,10 +109,10 @@
   every platform."
   [s]
   (when-not (string? s)
-    (err/reader-error! "inst" s "expected a string"))
+    (err/throw-reader-error "inst" s "expected a string"))
   (let [m (re-matches timestamp-pattern s)]
     (when-not m
-      (err/reader-error! "inst" s "not an RFC 3339 / EDN timestamp"))
+      (err/throw-reader-error "inst" s "not an RFC 3339 / EDN timestamp"))
     (let [[_ y mo d h mi sec frac off-sign off-h off-mi] m
           y      (parse-long* y)
           mo     (if mo (parse-long* mo) 1)
@@ -123,7 +123,7 @@
           nanos  (nanos-of frac)
           off-h  (if off-h (parse-long* off-h) 0)
           off-mi (if off-mi (parse-long* off-mi) 0)
-          fail!  (fn [reason] (err/reader-error! "inst" s reason))]
+          fail!  (fn [reason] (err/throw-reader-error "inst" s reason))]
       (cond
         (not (<= 1 mo 12))                 (fail! "month out of range")
         (not (<= 1 d (days-in-month y mo))) (fail! "day out of range for month")

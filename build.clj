@@ -10,7 +10,7 @@
             [deps-deploy.deps-deploy :as dd]))
 
 (def lib 'com.github.franks42/cedn)
-(def version "1.5.2")
+(def version "1.6.0")
 (def class-dir "target/classes")
 (def jar-file "target/cedn.jar")
 (def basis (delay (b/create-basis {:project "deps.edn" :root nil})))
