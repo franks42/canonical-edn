@@ -13,7 +13,7 @@ or any authorization framework.  Kex will depend on it.
 
 ## Current Status
 
-**v1.6.0 — naming: `cedn.core/check` and the `cedn.error/throw-*` functions; `assert!` and the `!`-suffixed error helpers are deprecated aliases (removed in 2.0). v1.5.2 — runtimes and published-artifact tests (no library code change). v1.5.1 was a documentation release. v1.5.0 brought profile enforcement, strict `#uuid` and CLI I/O correctness, on top of v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
+**v1.6.1 — fixes from the Devin review (`docs/review-devin-20260926.md`): `#inst` bytes no longer depend on the JVM locale; on JS, integers above 2^53 print exactly and whole numbers beyond 64 bits are doubles; `java.sql` dates, `#inst` ranges in `valid?`, never-throw `canonical?`/`inspect`, sub-nanosecond `#inst` digits refused. v1.6.0 — naming: `cedn.core/check` and the `cedn.error/throw-*` functions; `assert!` and the `!`-suffixed error helpers are deprecated aliases (removed in 2.0). v1.5.2 — runtimes and published-artifact tests (no library code change). v1.5.1 was a documentation release. v1.5.0 brought profile enforcement, strict `#uuid` and CLI I/O correctness, on top of v1.4.0 (determinism, injectivity, strict readers). Requires JDK 19+ on the JVM.**
 
 5 library platforms (JVM + Babashka + nbb + shadow-cljs + Scittle) plus a sixth artifact: `bin/cedn`, the CLI filter. Zero production dependencies beyond Clojure.
 
@@ -75,7 +75,7 @@ generated `dist/` and the historical sketches in `docs/`.
 - Tooling present: `bb`, `clojure`, JDK 25 (sdkman), `nbb`, `node`,
   `gh` (authenticated, git credential helper), Playwright browsers.
 
-### Release procedure (as executed for 1.4.0 – 1.6.0)
+### Release procedure (as executed for 1.4.0 – 1.6.1)
 
 1. `bb test:all`, plus `bb test:jar` and `bb test:cli-release`.
 2. Bump `version` in `src/cedn/core.cljc`, `bin/cedn`, `build.clj`
@@ -179,7 +179,7 @@ The CLI versions 1-for-1 with the library: `cedn` v1.3.1 ↔ library `com.github
 | shadow-cljs | Source (classpath) | `bb test:cljs` |
 | Scittle (browser) | CDN script tag via jsdelivr | `bb test:scittle-cdn` |
 
-Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.6.0"}`
+Maven coordinates: `com.github.franks42/cedn {:mvn/version "1.6.1"}`
 Build: `build.clj` (tools.build + deps-deploy) — `bb jar`, `bb install`, `clojure -T:build deploy`
 
 | Module | Status | Description |
@@ -475,7 +475,7 @@ ECMAScript implementation for 20,000+ doubles.
 ```clojure
 (require '[cedn.core :as cedn])
 
-cedn/version  ;=> "1.6.0"
+cedn/version  ;=> "1.6.1"
 
 ;; Canonicalize to bytes (for signing/hashing)
 (cedn/canonical-bytes {:a 1 :b 2})
@@ -714,7 +714,7 @@ Browser usage (CDN):
 ```html
 <script src="https://cdn.jsdelivr.net/npm/scittle@0.8.33/dist/scittle.js"></script>
 <script type="application/x-scittle"
-        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.6.0/dist/cedn.cljc"></script>
+        src="https://cdn.jsdelivr.net/gh/franks42/canonical-edn@v1.6.1/dist/cedn.cljc"></script>
 ```
 
 ## What's NOT Built Yet

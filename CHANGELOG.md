@@ -12,8 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
-Fixes from the Devin review (`docs/review-devin-20260926.md`), planned
-as 1.6.1. Every fix has a test shown to fail without it.
+## [1.6.1] — 2026-09-26 — Fixes from the Devin review
+
+Fixes from the Devin review (`docs/review-devin-20260926.md`). Every fix
+has a test shown to fail without it.
 
 ### Fixed
 
