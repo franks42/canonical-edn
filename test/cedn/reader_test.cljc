@@ -90,7 +90,12 @@
     "2019-02-29"            "day out of range for month"
     "1970-01-01T24:00"      "hour out of range"
     "1970-01-01T00:60"      "minute out of range"
-    "2016-12-31T23:59:60Z"  "leap second is not representable")
+    "2016-12-31T23:59:60Z"  "leap second is not representable"
+    ;; beyond nanoseconds (docs/review-devin-20260926.md, finding 9)
+    "2020-01-01T00:00:00.1234567895Z" "sub-nanosecond precision is not representable")
+  (testing "extra fractional digits that are zeros change nothing"
+    (is (= (ms (reader/parse-inst "2020-01-01T00:00:00.123Z"))
+           (ms (reader/parse-inst "2020-01-01T00:00:00.1230000000000Z")))))
   (testing "leap days are allowed in leap years"
     (is (some? (reader/parse-inst "2020-02-29")))
     (is (some? (reader/parse-inst "2000-02-29")))

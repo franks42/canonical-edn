@@ -1,7 +1,8 @@
 (ns cedn.schema
   "Hand-written predicates for CEDN-P type contracts.
   Simple recursive walk over the closed CEDN-P type set."
-  (:require [cedn.token :as token]))
+  (:require [cedn.number :as number]
+            [cedn.token :as token]))
 
 ;; --- Leaf predicates ---
 
@@ -13,9 +14,21 @@
 
 (defn- inst-value?
   [x]
-  #?(:clj  (or (instance? java.util.Date x)
+  ;; java.sql.Date/Time are Dates without an instant (.toInstant throws);
+  ;; matched by name so the java.sql module is not required.
+  #?(:clj  (or (and (instance? java.util.Date x)
+                    (not (#{"java.sql.Date" "java.sql.Time"} (.getName (class x)))))
                (instance? java.time.Instant x))
      :cljs (instance? js/Date x)))
+
+(defn- inst-in-range?
+  "Is inst x's year within 0000-9999 (RFC 3339's four digits, §3.12), as
+  emit requires? An invalid js/Date (NaN time) is not."
+  [x]
+  #?(:clj  (let [i (if (instance? java.time.Instant x) x (.toInstant ^java.util.Date x))]
+             (<= 0 (.getYear (.atZone ^java.time.Instant i java.time.ZoneOffset/UTC)) 9999))
+     :cljs (let [y (.getUTCFullYear x)]
+             (and (not (js/isNaN y)) (<= 0 y 9999)))))
 
 (defn- uuid-value?
   [x]
@@ -37,9 +50,9 @@
     (string? v)  (token/well-formed-unicode? v)
     (keyword? v) (nil? (token/keyword-error v))
     (symbol? v)  (nil? (token/symbol-error v))
-    (int? v)     true
+    (number/cedn-int? v) true
     (double? v)  (finite-double? v)
-    (inst-value? v) true
+    (inst-value? v) (inst-in-range? v)
     (uuid-value? v) true
     (bytes-value? v) true
     (seq? v)     (every? cedn-p-valid? v)
@@ -103,12 +116,15 @@
                        :cedn/value  v
                        :cedn/reason reason
                        :cedn/path   path})
-    (int? v)        nil
+    (number/cedn-int? v) nil
     (double? v)     (when-not (finite-double? v)
                       {:cedn/error :cedn/invalid-number
                        :cedn/value v
                        :cedn/path  path})
-    (inst-value? v) nil
+    (inst-value? v) (when-not (inst-in-range? v)
+                      {:cedn/error :cedn/out-of-range
+                       :cedn/value v
+                       :cedn/path  path})
     (uuid-value? v) nil
     (bytes-value? v) nil
     (seq? v)        (explain-sequential v path)

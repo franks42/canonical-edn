@@ -4,6 +4,14 @@
   #?(:clj (:import [java.util Date]
                    [java.time Instant])))
 
+#?(:clj
+   (defn- sql-time
+     "A java.sql.Time, or nil on babashka (which lacks the class). Built
+     through eval so that bb never resolves the class name."
+     []
+     (when-not (System/getProperty "babashka.version")
+       (eval '(java.sql.Time. 0)))))
+
 (deftest valid-scalars-test
   (testing "nil, booleans, numbers, strings, keywords, symbols"
     (are [v]
@@ -45,6 +53,29 @@
        (is (schema/valid? :cedn-p (Date.)))
        (is (schema/valid? :cedn-p (Instant/now)))
        (is (schema/valid? :cedn-p #uuid "29558297-e4b8-47af-bf3d-84942b5b40b8")))))
+
+(deftest inst-range-test
+  ;; valid?/explain agree with emit: an #inst outside years 0000-9999
+  ;; cannot canonicalize (docs/review-devin-20260926.md, finding 4).
+  (let [too-late #?(:clj (Instant/parse "+10000-01-01T00:00:00Z")
+                    :cljs (js/Date. (js/Date.UTC 10000 0 1)))
+        too-early #?(:clj (Instant/parse "-0001-12-31T00:00:00Z")
+                     :cljs (let [d (js/Date. 0)] (.setUTCFullYear d -1) d))]
+    (doseq [v [too-late too-early]]
+      (is (not (schema/valid? :cedn-p v)))
+      (is (= :cedn/out-of-range (:cedn/error (schema/explain :cedn-p v))))
+      (is (= [:k 0] (:cedn/path (schema/explain :cedn-p {:k [v]})))))
+    (is (schema/valid? :cedn-p #?(:clj (Instant/parse "9999-12-31T23:59:59.999999999Z")
+                                  :cljs (js/Date. (js/Date.UTC 9999 11 31 23 59 59 999))))))
+  #?(:cljs
+     (testing "an invalid js/Date (NaN time)"
+       (is (not (schema/valid? :cedn-p (js/Date. js/NaN))))))
+  #?(:clj
+     (testing "java.sql.Date/Time have no instant: not valid"
+       (is (not (schema/valid? :cedn-p (java.sql.Date. 0))))
+       (when-let [t (sql-time)] (is (not (schema/valid? :cedn-p t))))
+       (when-not (System/getProperty "babashka.version") ; bb can't build a Timestamp
+         (is (schema/valid? :cedn-p (eval '(java.sql.Timestamp. 0))))))))
 
 (deftest valid-bytes-test
   (testing "byte arrays are valid"

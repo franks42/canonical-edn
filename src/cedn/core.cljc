@@ -55,8 +55,11 @@
 ;; =============================================================
 
 (defn valid?
-  "Returns true if value consists exclusively of types allowed
-  by the given profile."
+  "Returns true if value consists exclusively of types allowed by the
+  given profile, within their ranges (an #inst year within 0000-9999),
+  so that canonicalizing it cannot fail on a type or range. It does not
+  check for values that become equal after canonicalization (duplicate
+  map keys or set elements), which canonical-str detects."
   ([value]
    (valid? value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
@@ -71,7 +74,8 @@
    (schema/explain profile value)))
 
 (defn check
-  "value, if it is valid CEDN (see valid?); otherwise throws. Pure.
+  "value, if it is valid CEDN (see valid?: the types, and ranges such as
+  an #inst year within 0000-9999); otherwise throws. Pure.
 
    Throws ex-info \"CEDN type violation\" whose data is explain's result,
    with :cedn/error naming the violation (e.g. :cedn/unsupported-type),
@@ -112,6 +116,14 @@
      [_bs]
      nil))
 
+(defn- inspect-error [profile errors]
+  {:status    :error
+   :canonical nil
+   :bytes     nil
+   :sha-256   nil
+   :errors    errors
+   :profile   profile})
+
 (defn inspect
   "Canonicalize with full diagnostics. Returns a map:
 
@@ -122,7 +134,8 @@
      :errors     [{...} ...]
      :profile    :cedn-p}
 
-  Never throws."
+  Never throws: a value nested too deeply for the stack is reported as
+  an :error, like any other failure."
   ([value]
    (inspect value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
@@ -139,14 +152,13 @@
         :errors    nil
         :profile   profile})
      (catch #?(:clj Exception :cljs :default) e
-       {:status    :error
-        :canonical nil
-        :bytes     nil
-        :sha-256   nil
-        :errors    [(or (ex-data e)
-                        {:message #?(:clj (.getMessage ^Exception e)
-                                     :cljs (.-message e))})]
-        :profile   profile}))))
+       (inspect-error profile [(or (ex-data e)
+                                   {:message #?(:clj (.getMessage ^Exception e)
+                                                :cljs (.-message e))})]))
+     ;; Deep nesting overflows the stack (§8.4 leaves depth limits to the
+     ;; application); "never throws" still holds.
+     #?(:clj (catch StackOverflowError _
+               (inspect-error profile [{:message "nesting too deep (StackOverflowError)"}]))))))
 
 ;; =============================================================
 ;; 4. Canonical readers
@@ -168,7 +180,11 @@
    'bytes reader/hex->bytes})
 
 (defn canonical?
-  "Given an EDN string, returns true if it is already in canonical form."
+  "Given an EDN string, returns true if it is exactly one value in
+  canonical form: nothing before or after it, not even a trailing newline
+  (the CLI ends each form with one), and not two forms. Returns false for
+  anything else, including malformed or too deeply nested input; never
+  throws for the string's contents."
   ([edn-str]
    (canonical? edn-str {}))
   ([edn-str {:keys [profile] :or {profile :cedn-p}}]
@@ -178,7 +194,8 @@
            result (canonical-str value {:profile profile})]
        (= edn-str result))
      (catch #?(:clj Exception :cljs :default) _
-       false))))
+       false)
+     #?(:clj (catch StackOverflowError _ false)))))
 
 ;; =============================================================
 ;; 5. Re-exported from cedn.order
@@ -186,5 +203,7 @@
 
 (def rank
   "Total ordering comparator over canonical EDN values.
-  Implements Section 5 of the CEDN specification."
+  Implements Section 5 of the CEDN specification. Its domain is CEDN-P
+  values: two values of unsupported types compare as equal (0), so do
+  not sort such values with it (check them with valid? first)."
   order/rank)

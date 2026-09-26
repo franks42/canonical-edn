@@ -12,6 +12,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+Fixes from the Devin review (`docs/review-devin-20260926.md`), planned
+as 1.6.1. Every fix has a test shown to fail without it.
+
+### Fixed
+
+- **`#inst` bytes depended on the JVM's default locale.** `String/format`
+  localizes `%d`, so under `ar-EG`, `fa-IR`, Devanagari or Thai digit
+  locales an `#inst` came out as `#inst "٢٠٢٠-…"`: a signature made on
+  such a machine verified nowhere else. `format-inst` now formats with
+  `Locale/ROOT`. A test runs every compliance vector under four
+  non-Latin-digit locales. (JVM and bb.)
+- **ClojureScript printed large whole numbers wrongly.**
+  - Whole numbers between 2^53 and 2^63 are integers (§3.3) but were
+    printed in JS's rounded form: 2^60 came out as `1152921504606847000`,
+    a different integer. They now print exactly (via `BigInt`), as on
+    the JVM.
+  - Whole numbers beyond the signed 64-bit range are doubles (§3.3) but
+    were emitted as integers: `1e20` came out as `100000000000000000000`
+    instead of `100000000000000000000.0`.
+  - One predicate, `cedn.number/cedn-int?`, now decides integer versus
+    double for emit, ordering and the schema on every platform.
+  - New compliance vectors: `int 2^60`, `int -2^63`, `double 1e20`,
+    `double 2^63`, identical on all platforms.
+- **`java.sql.Date` and `java.sql.Time`** (whose `.toInstant` always
+  throws) raised a raw `UnsupportedOperationException`. They are now a
+  `:cedn/unsupported-type` error, and `valid?` returns false for them.
+  `java.sql.Timestamp` still works, nanoseconds included.
+- **`valid?`, `explain` and `check` accepted `#inst` values that cannot
+  canonicalize:** a year outside 0000–9999, or an invalid `js/Date`. They
+  now report `:cedn/out-of-range`, as emit does. The out-of-range message
+  no longer says "integer" for an `#inst`.
+- **`canonical?` and `inspect` threw `StackOverflowError`** on deeply
+  nested input, although documented as never throwing. They now return
+  `false` and `{:status :error …}`.
+- **The `#inst` reader truncated sub-nanosecond digits silently.** Non-zero
+  digits beyond the ninth are now refused ("sub-nanosecond precision is
+  not representable"); extra zeros are still accepted.
+- **`bin/cedn`**: on a parse, canonicalization or I/O error the
+  `--output`/`--input` streams are now closed before exiting (the exit
+  used to skip the `finally`). Messages and exit codes are unchanged.
+
+### Documentation
+
+- Docstrings: `canonical?` accepts exactly one form (no trailing newline);
+  `rank`'s domain is CEDN-P values (unsupported values compare equal);
+  `valid?`/`check` cover ranges, not duplicate keys.
+- Spec §3.3: on JavaScript, integers above 2^53 must be printed with
+  their exact digits.
+
 ## [1.6.0] — 2026-09-23 — Naming: `check`, `throw-*`
 
 Follows the naming convention shared with uuidv7, nacljc and signet: a

@@ -6,6 +6,14 @@
 
 ;; --- C.1 Round-Trip Identity ---
 
+#?(:clj
+   (defn- sql-time
+     "A java.sql.Time, or nil on babashka (which lacks the class). Built
+     through eval so that bb never resolves the class name."
+     []
+     (when-not (System/getProperty "babashka.version")
+       (eval '(java.sql.Time. 0)))))
+
 (deftest emit-nil-test
   (is (= "nil" (emit/emit-str :cedn-p nil))))
 
@@ -19,6 +27,45 @@
     42  "42"
     -7  "-7"
     0   "0"))
+
+(deftest emit-large-whole-numbers-test
+  ;; The same literals on every platform, the same bytes (spec §3.3/§3.4).
+  ;; On JS all are doubles: whole values in the signed 64-bit range are
+  ;; integers and print exactly (not JS's rounded shortest form); whole
+  ;; values beyond it are doubles and get ".0". Before 1.6.1, JS printed
+  ;; 2^60 as 1152921504606847000 and 1e20 without ".0"
+  ;; (docs/review-devin-20260926.md, finding 2).
+  (testing "integers above 2^53, inside the 64-bit range: exact digits"
+    (are [input expected] (= expected (emit/emit-str :cedn-p input))
+      1152921504606846976  "1152921504606846976"    ; 2^60
+      9223372036854774784  "9223372036854774784"    ; largest double below 2^63
+      -9223372036854775808 "-9223372036854775808"   ; -2^63
+      9007199254740994     "9007199254740994"))
+  (testing "whole doubles at or beyond 2^63: doubles, with .0"
+    (are [input expected] (= expected (emit/emit-str :cedn-p input))
+      ;; doubles print in ECMAScript shortest form (§3.4), not exact digits
+      9.223372036854775808E18 "9223372036854776000.0"   ; 2^63
+      1e20                    "100000000000000000000.0"
+      -1e20                   "-100000000000000000000.0"
+      1e21                    "1e+21"))
+  (testing "as map keys and set elements"
+    (is (= "{100000000000000000000.0 :a}" (emit/emit-str :cedn-p {1e20 :a})))
+    (is (= "#{5 1152921504606846976 100000000000000000000.0}"
+           (emit/emit-str :cedn-p #{1e20 5 1152921504606846976})))))
+
+#?(:clj
+   (deftest emit-sql-dates-test
+     ;; java.sql.Date/Time: .toInstant throws; must be a CEDN error with
+     ;; ex-data, not a raw exception (docs/review-devin-20260926.md, finding 3).
+     (doseq [v (remove nil? [(java.sql.Date. 0) (sql-time)])]
+       (let [e (try (emit/emit-str :cedn-p v) nil
+                    (catch clojure.lang.ExceptionInfo e e))]
+         (is (some? e) (str (class v) " throws ex-info"))
+         (is (= :cedn/unsupported-type (:cedn/error (ex-data e))) (str (class v)))))
+     (when-not (System/getProperty "babashka.version") ; bb can't build a Timestamp
+       (testing "java.sql.Timestamp has an instant, with nanoseconds"
+         (is (= "#inst \"1970-01-01T00:00:00.000000007Z\""
+                (emit/emit-str :cedn-p (eval '(doto (java.sql.Timestamp. 0) (.setNanos 7))))))))))
 
 (deftest emit-double-test
   (is (= "3.14" (emit/emit-str :cedn-p 3.14)))

@@ -15,6 +15,30 @@
   (:require [cedn.error :as err]
             [clojure.string :as str]))
 
+(defn cedn-int?
+  "Is x a CEDN integer (spec §3.3)? On the JVM: a fixed-width integer
+  type (int?); BigInts are not CEDN-P. On ClojureScript, where every
+  number is a double: a finite whole number within the signed 64-bit
+  range [-2^63, 2^63). Larger whole numbers are doubles. Pure."
+  [x]
+  #?(:clj  (int? x)
+     :cljs (and (number? x)
+                (js/Number.isFinite x)
+                (== x (js/Math.trunc x))
+                (>= x -9223372036854775808)       ; -2^63, exact as a double
+                (< x (js/Math.pow 2 63)))))
+
+#?(:cljs
+   (defn format-int
+     "The exact decimal digits of a CEDN integer on JS. Above 2^53,
+     Number.prototype.toString gives the shortest round-trip form padded
+     with zeros (2^60 -> \"1152921504606847000\"), which is a different
+     integer; BigInt gives the exact value. Pure."
+     [x]
+     (if (js/Number.isSafeInteger x)
+       (str x)
+       (.toString (js/BigInt x)))))
+
 #?(:clj
    (defn- ecma-reformat
      "Reformat Double/toString output (JDK 19+ Schubfach) into

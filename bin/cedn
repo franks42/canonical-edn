@@ -109,6 +109,12 @@ EXAMPLES:
   (binding [*out* *err*] (println "cedn:" prefix msg))
   (System/exit code))
 
+(defn fail
+  "Like die, but throws, so that finally blocks (closing --output/--input)
+  run before main prints the message and exits."
+  [code prefix msg]
+  (throw (ex-info (str prefix " " msg) {::exit code})))
+
 (defn die-usage [msg]
   (binding [*out* *err*]
     (println "cedn:" msg)
@@ -152,11 +158,11 @@ EXAMPLES:
       (loop [first? true]
         (let [v (try (edn/read {:eof ::eof :readers cedn/readers} reader)
                      (catch Throwable t
-                       (die 1 "parse error:" (.getMessage t))))]
+                       (fail 1 "parse error:" (.getMessage t))))]
           (when (not= v ::eof)
             (let [bs (try (cedn/canonical-bytes v)
                           (catch Throwable t
-                            (die 1 "canonicalization error:" (.getMessage t))))]
+                            (fail 1 "canonicalization error:" (.getMessage t))))]
               (if objects?
                 (do (when-not first? (.write out sep-bytes))
                     (.write out ^bytes bs))
@@ -166,7 +172,7 @@ EXAMPLES:
             (recur false))))
       (catch java.io.IOException e
         (when-not (broken-pipe? e)
-          (die 1 "I/O error:" (.getMessage e)))))))
+          (fail 1 "I/O error:" (.getMessage e)))))))
 
 ;; ----- main -----
 
@@ -188,8 +194,17 @@ EXAMPLES:
   (let [in     (make-input-stream opts)
         reader (make-reader in)
         out    (make-output-stream opts)]
-    (try
-      (emit-forms! reader out (:objects opts))
-      (finally
-        (when (:output opts) (.close out))
-        (when (or (:input opts) (:edn opts)) (.close in))))))
+    (when-let [[code msg]
+               (try
+                 (try
+                   (emit-forms! reader out (:objects opts))
+                   nil
+                   (finally
+                     (when (:output opts) (.close out))
+                     (when (or (:input opts) (:edn opts)) (.close in))))
+                 (catch clojure.lang.ExceptionInfo e
+                   (if-let [code (::exit (ex-data e))]
+                     [code (ex-message e)]
+                     (throw e))))]
+      (binding [*out* *err*] (println "cedn:" msg))
+      (System/exit code))))

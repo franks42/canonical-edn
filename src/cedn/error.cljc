@@ -25,9 +25,11 @@
                                  :cedn/path  path}))))
 
 (defn throw-out-of-range
-  "Throw :cedn/out-of-range for integers outside 64-bit signed range."
+  "Throw :cedn/out-of-range for a value of an accepted type outside its
+  representable range: an integer outside the signed 64-bit range, or an
+  #inst whose year is outside 0000-9999."
   ([value]      (throw-out-of-range value nil))
-  ([value path] (throw (ex-info "CEDN: integer out of range"
+  ([value path] (throw (ex-info "CEDN: value out of range"
                                 {:cedn/error :cedn/out-of-range
                                  :cedn/value value
                                  :cedn/path  path}))))

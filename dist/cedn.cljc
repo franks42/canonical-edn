@@ -28,9 +28,11 @@
                                  :cedn/path  path}))))
 
 (defn throw-out-of-range
-  "Throw :cedn/out-of-range for integers outside 64-bit signed range."
+  "Throw :cedn/out-of-range for a value of an accepted type outside its
+  representable range: an integer outside the signed 64-bit range, or an
+  #inst whose year is outside 0000-9999."
   ([value]      (throw-out-of-range value nil))
-  ([value path] (throw (ex-info "CEDN: integer out of range"
+  ([value path] (throw (ex-info "CEDN: value out of range"
                                 {:cedn/error :cedn/out-of-range
                                  :cedn/value value
                                  :cedn/path  path}))))
@@ -253,6 +255,30 @@
   (:require [cedn.error :as err]
             [clojure.string :as str]))
 
+(defn cedn-int?
+  "Is x a CEDN integer (spec §3.3)? On the JVM: a fixed-width integer
+  type (int?); BigInts are not CEDN-P. On ClojureScript, where every
+  number is a double: a finite whole number within the signed 64-bit
+  range [-2^63, 2^63). Larger whole numbers are doubles. Pure."
+  [x]
+  #?(:clj  (int? x)
+     :cljs (and (number? x)
+                (js/Number.isFinite x)
+                (== x (js/Math.trunc x))
+                (>= x -9223372036854775808)       ; -2^63, exact as a double
+                (< x (js/Math.pow 2 63)))))
+
+#?(:cljs
+   (defn format-int
+     "The exact decimal digits of a CEDN integer on JS. Above 2^53,
+     Number.prototype.toString gives the shortest round-trip form padded
+     with zeros (2^60 -> \"1152921504606847000\"), which is a different
+     integer; BigInt gives the exact value. Pure."
+     [x]
+     (if (js/Number.isSafeInteger x)
+       (str x)
+       (.toString (js/BigInt x)))))
+
 #?(:clj
    (defn- ecma-reformat
      "Reformat Double/toString output (JDK 19+ Schubfach) into
@@ -382,7 +408,8 @@
   "Total ordering over canonical EDN values (Section 5).
 
   Exposed as cedn.core/rank for advanced use cases like
-  building custom sorted collections.")
+  building custom sorted collections."
+  (:require [cedn.number :as number]))
 
 (defn type-priority
   "Returns the integer priority for a value's type.
@@ -464,7 +491,7 @@
    (defn- exact-decimal
      "Exact BigDecimal value of an integer or double (no rounding)."
      [x]
-     (if (int? x)
+     (if (number/cedn-int? x)
        (java.math.BigDecimal/valueOf (long x))
        (java.math.BigDecimal. (double x)))))
 
@@ -477,8 +504,8 @@
   on the input order (§5.3.3).  On JS every number is a double, so
   plain comparison is already exact."
   [a b]
-  (let [a-int? (int? a)
-        b-int? (int? b)
+  (let [a-int? (number/cedn-int? a)
+        b-int? (number/cedn-int? b)
         cmp #?(:clj  (cond
                        (and a-int? b-int?) (compare (long a) (long b))
                        (or a-int? b-int?)  (compare (exact-decimal a) (exact-decimal b))
@@ -644,7 +671,8 @@
 (ns cedn.schema
   "Hand-written predicates for CEDN-P type contracts.
   Simple recursive walk over the closed CEDN-P type set."
-  (:require [cedn.token :as token]))
+  (:require [cedn.number :as number]
+            [cedn.token :as token]))
 
 ;; --- Leaf predicates ---
 
@@ -656,9 +684,21 @@
 
 (defn- inst-value?
   [x]
-  #?(:clj  (or (instance? java.util.Date x)
+  ;; java.sql.Date/Time are Dates without an instant (.toInstant throws);
+  ;; matched by name so the java.sql module is not required.
+  #?(:clj  (or (and (instance? java.util.Date x)
+                    (not (#{"java.sql.Date" "java.sql.Time"} (.getName (class x)))))
                (instance? java.time.Instant x))
      :cljs (instance? js/Date x)))
+
+(defn- inst-in-range?
+  "Is inst x's year within 0000-9999 (RFC 3339's four digits, §3.12), as
+  emit requires? An invalid js/Date (NaN time) is not."
+  [x]
+  #?(:clj  (let [i (if (instance? java.time.Instant x) x (.toInstant ^java.util.Date x))]
+             (<= 0 (.getYear (.atZone ^java.time.Instant i java.time.ZoneOffset/UTC)) 9999))
+     :cljs (let [y (.getUTCFullYear x)]
+             (and (not (js/isNaN y)) (<= 0 y 9999)))))
 
 (defn- uuid-value?
   [x]
@@ -680,9 +720,9 @@
     (string? v)  (token/well-formed-unicode? v)
     (keyword? v) (nil? (token/keyword-error v))
     (symbol? v)  (nil? (token/symbol-error v))
-    (int? v)     true
+    (number/cedn-int? v) true
     (double? v)  (finite-double? v)
-    (inst-value? v) true
+    (inst-value? v) (inst-in-range? v)
     (uuid-value? v) true
     (bytes-value? v) true
     (seq? v)     (every? cedn-p-valid? v)
@@ -746,12 +786,15 @@
                        :cedn/value  v
                        :cedn/reason reason
                        :cedn/path   path})
-    (int? v)        nil
+    (number/cedn-int? v) nil
     (double? v)     (when-not (finite-double? v)
                       {:cedn/error :cedn/invalid-number
                        :cedn/value v
                        :cedn/path  path})
-    (inst-value? v) nil
+    (inst-value? v) (when-not (inst-in-range? v)
+                      {:cedn/error :cedn/out-of-range
+                       :cedn/value v
+                       :cedn/path  path})
     (uuid-value? v) nil
     (bytes-value? v) nil
     (seq? v)        (explain-sequential v path)
@@ -867,7 +910,12 @@
      [v]
      (let [inst (cond
                   (instance? Instant v) v
-                  (instance? Date v) (.toInstant ^Date v)
+                  ;; java.sql.Date/Time are Dates whose .toInstant always
+                  ;; throws UnsupportedOperationException: refuse them
+                  ;; with a CEDN error instead.
+                  (instance? Date v) (try (.toInstant ^Date v)
+                                          (catch UnsupportedOperationException _
+                                            (err/throw-unsupported-type v)))
                   :else (err/throw-unsupported-type v))
            zdt (.atZone ^Instant inst ZoneOffset/UTC)
            nano (.getNano ^Instant inst)
@@ -875,9 +923,11 @@
        ;; RFC 3339 has exactly four year digits (§3.12)
        (when-not (<= 0 year 9999)
          (err/throw-out-of-range v))
-       (format "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
-               year (.getMonthValue zdt) (.getDayOfMonth zdt)
-               (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano))))
+       ;; Locale/ROOT: String/format localizes %d digits, so under e.g.
+       ;; ar-EG the default locale would emit Arabic-Indic digits.
+       (String/format java.util.Locale/ROOT "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
+                      (object-array [year (.getMonthValue zdt) (.getDayOfMonth zdt)
+                                     (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano])))))
 
 #?(:cljs
    (defn- format-inst
@@ -1008,17 +1058,14 @@
     (boolean? value)
     (.append sb (if value "true" "false"))
 
-    (int? value)
-    (do
-      #?(:clj
-         (when-not (and (>= (long value) -9223372036854775808)
-                        (<= (long value) 9223372036854775807))
-           (err/throw-out-of-range value)))
-      (.append sb (str value)))
+    ;; int? values are always within 64 bits on the JVM (BigInts are not
+    ;; int?); on JS, cedn-int? includes the range check (§3.3).
+    (number/cedn-int? value)
+    (.append sb #?(:clj (str value) :cljs (number/format-int value)))
 
     #?(:clj  (instance? Double value)
        :cljs (and (number? value)
-                  (not (int? value))))
+                  (not (number/cedn-int? value))))
     (.append sb (number/format-double value))
 
     (string? value)
@@ -1187,8 +1234,8 @@
     0))
 
 (defn- nanos-of
-  "A fractional-second string to nanoseconds, zero-padded or truncated
-  to 9 digits."
+  "A fractional-second string to nanoseconds, zero-padded or cut to 9
+  digits (parse-inst refuses non-zero digits beyond the ninth)."
   [frac]
   (if frac
     (let [padded (subs (str frac "00000000") 0 9)]
@@ -1230,7 +1277,12 @@
         (= 60 sec)                         (fail! "leap second is not representable")
         (not (<= 0 sec 59))                (fail! "second out of range")
         (not (<= 0 off-h 23))              (fail! "offset hour out of range")
-        (not (<= 0 off-mi 59))             (fail! "offset minute out of range"))
+        (not (<= 0 off-mi 59))             (fail! "offset minute out of range")
+        ;; Beyond nanoseconds no platform can represent the value: refuse
+        ;; rather than truncate (trailing zeros change nothing).
+        (and frac (> (count frac) 9)
+             (not (re-matches #"0*" (subs frac 9))))
+        (fail! "sub-nanosecond precision is not representable"))
       (let [off-minutes (* (if (= "-" off-sign) -1 1)
                            (+ (* 60 off-h) off-mi))]
         #?(:clj
@@ -1302,8 +1354,11 @@
 ;; =============================================================
 
 (defn valid?
-  "Returns true if value consists exclusively of types allowed
-  by the given profile."
+  "Returns true if value consists exclusively of types allowed by the
+  given profile, within their ranges (an #inst year within 0000-9999),
+  so that canonicalizing it cannot fail on a type or range. It does not
+  check for values that become equal after canonicalization (duplicate
+  map keys or set elements), which canonical-str detects."
   ([value]
    (valid? value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
@@ -1318,7 +1373,8 @@
    (schema/explain profile value)))
 
 (defn check
-  "value, if it is valid CEDN (see valid?); otherwise throws. Pure.
+  "value, if it is valid CEDN (see valid?: the types, and ranges such as
+  an #inst year within 0000-9999); otherwise throws. Pure.
 
    Throws ex-info \"CEDN type violation\" whose data is explain's result,
    with :cedn/error naming the violation (e.g. :cedn/unsupported-type),
@@ -1359,6 +1415,14 @@
      [_bs]
      nil))
 
+(defn- inspect-error [profile errors]
+  {:status    :error
+   :canonical nil
+   :bytes     nil
+   :sha-256   nil
+   :errors    errors
+   :profile   profile})
+
 (defn inspect
   "Canonicalize with full diagnostics. Returns a map:
 
@@ -1369,7 +1433,8 @@
      :errors     [{...} ...]
      :profile    :cedn-p}
 
-  Never throws."
+  Never throws: a value nested too deeply for the stack is reported as
+  an :error, like any other failure."
   ([value]
    (inspect value {}))
   ([value {:keys [profile] :or {profile :cedn-p}}]
@@ -1386,14 +1451,13 @@
         :errors    nil
         :profile   profile})
      (catch #?(:clj Exception :cljs :default) e
-       {:status    :error
-        :canonical nil
-        :bytes     nil
-        :sha-256   nil
-        :errors    [(or (ex-data e)
-                        {:message #?(:clj (.getMessage ^Exception e)
-                                     :cljs (.-message e))})]
-        :profile   profile}))))
+       (inspect-error profile [(or (ex-data e)
+                                   {:message #?(:clj (.getMessage ^Exception e)
+                                                :cljs (.-message e))})]))
+     ;; Deep nesting overflows the stack (§8.4 leaves depth limits to the
+     ;; application); "never throws" still holds.
+     #?(:clj (catch StackOverflowError _
+               (inspect-error profile [{:message "nesting too deep (StackOverflowError)"}]))))))
 
 ;; =============================================================
 ;; 4. Canonical readers
@@ -1415,7 +1479,11 @@
    'bytes reader/hex->bytes})
 
 (defn canonical?
-  "Given an EDN string, returns true if it is already in canonical form."
+  "Given an EDN string, returns true if it is exactly one value in
+  canonical form: nothing before or after it, not even a trailing newline
+  (the CLI ends each form with one), and not two forms. Returns false for
+  anything else, including malformed or too deeply nested input; never
+  throws for the string's contents."
   ([edn-str]
    (canonical? edn-str {}))
   ([edn-str {:keys [profile] :or {profile :cedn-p}}]
@@ -1425,7 +1493,8 @@
            result (canonical-str value {:profile profile})]
        (= edn-str result))
      (catch #?(:clj Exception :cljs :default) _
-       false))))
+       false)
+     #?(:clj (catch StackOverflowError _ false)))))
 
 ;; =============================================================
 ;; 5. Re-exported from cedn.order
@@ -1433,6 +1502,8 @@
 
 (def rank
   "Total ordering comparator over canonical EDN values.
-  Implements Section 5 of the CEDN specification."
+  Implements Section 5 of the CEDN specification. Its domain is CEDN-P
+  values: two values of unsupported types compare as equal (0), so do
+  not sort such values with it (check them with valid? first)."
   order/rank)
 

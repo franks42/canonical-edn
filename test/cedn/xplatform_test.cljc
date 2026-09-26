@@ -50,6 +50,24 @@
         (testing label
           (is (= exp-hex (bytes->hex (cedn/canonical-bytes value)))))))))
 
+#?(:clj
+   (deftest compliance-under-non-latin-digit-locales-test
+     ;; Canonical bytes must not depend on the JVM's default locale.
+     ;; String/format localizes %d digits: under ar-EG an #inst came out as
+     ;; "٢٠٢٠-…" before 1.6.1 (docs/review-devin-20260926.md, finding 1).
+     (let [{[input expected-str] :compliance vectors :vectors} (read-vectors-file)
+           ;; setDefault(Locale) also sets every category (FORMAT included)
+           before (java.util.Locale/getDefault)]
+       (doseq [tag ["ar-EG" "fa-IR" "hi-IN-u-nu-deva" "th-TH-u-nu-thai"]]
+         (try
+           (java.util.Locale/setDefault (java.util.Locale/forLanguageTag tag))
+           (testing tag
+             (is (= expected-str (cedn/canonical-str input)))
+             (doseq [[label value expected _] vectors]
+               (is (= expected (cedn/canonical-str value)) label)))
+           (finally
+             (java.util.Locale/setDefault before)))))))
+
 ;; =================================================================
 ;; Inline reference data (safety net — works without the file)
 ;; =================================================================
@@ -70,6 +88,16 @@
    ["int -7" -7 "-7" "2d37"]
    ["int max-safe" 9007199254740991 "9007199254740991"
     "39303037313939323534373430393931"]
+   ;; 1.6.1: beyond 2^53 JS integers print exactly, and whole numbers
+   ;; beyond the 64-bit range are doubles (docs/review-devin-20260926.md)
+   ["int 2^60" 1152921504606846976 "1152921504606846976"
+    "31313532393231353034363036383436393736"]
+   ["int -2^63" -9223372036854775808 "-9223372036854775808"
+    "2d39323233333732303336383534373735383038"]
+   ["double 1e20" 1e20 "100000000000000000000.0"
+    "3130303030303030303030303030303030303030302e30"]
+   ["double 2^63" 9.223372036854775808E18 "9223372036854776000.0"
+    "393232333337323033363835343737363030302e30"]
    ;; double (unambiguously non-integer on all platforms)
    ["double pi" 3.141592653589793 "3.141592653589793"
     "332e313431353932363533353839373933"]

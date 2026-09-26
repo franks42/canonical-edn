@@ -7,6 +7,14 @@
 
 ;; --- canonical-str ---
 
+#?(:clj
+   (defn- sql-time
+     "A java.sql.Time, or nil on babashka (which lacks the class). Built
+     through eval so that bb never resolves the class name."
+     []
+     (when-not (System/getProperty "babashka.version")
+       (eval '(java.sql.Time. 0)))))
+
 (deftest canonical-str-test
   (are [input expected]
        (= expected (cedn/canonical-str input))
@@ -250,3 +258,23 @@
     (is (= "{:a 1}" (cedn/canonical-str {:a 1} {:profile :cedn-p})))
     (is (= "{:a 1}" (cedn/canonical-str {:a 1} {})))
     (is (= "{:a 1}" (cedn/canonical-str {:a 1})))))
+
+;; --- 1.6.1: never-throw promises and java.sql dates ---
+
+#?(:clj
+   (deftest deep-nesting-never-throws-test
+     ;; canonical? and inspect promise not to throw; a StackOverflowError
+     ;; used to escape them (docs/review-devin-20260926.md, finding 5).
+     (let [n    50000
+           text (str (apply str (repeat n "[")) "1" (apply str (repeat n "]")))
+           deep (reduce (fn [a _] [a]) 1 (range n))]
+       (is (false? (cedn/canonical? text)))
+       (is (= :error (:status (cedn/inspect deep)))))))
+
+#?(:clj
+   (deftest sql-dates-are-cedn-errors-test
+     ;; finding 3: a CEDN error with :cedn/error, also through inspect
+     (let [r (cedn/inspect (java.sql.Date. 0))]
+       (is (= :error (:status r)))
+       (is (= :cedn/unsupported-type (:cedn/error (first (:errors r))))))
+     (when-let [t (sql-time)] (is (not (cedn/valid? t))))))

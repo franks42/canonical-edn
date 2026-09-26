@@ -91,8 +91,8 @@
     0))
 
 (defn- nanos-of
-  "A fractional-second string to nanoseconds, zero-padded or truncated
-  to 9 digits."
+  "A fractional-second string to nanoseconds, zero-padded or cut to 9
+  digits (parse-inst refuses non-zero digits beyond the ninth)."
   [frac]
   (if frac
     (let [padded (subs (str frac "00000000") 0 9)]
@@ -134,7 +134,12 @@
         (= 60 sec)                         (fail! "leap second is not representable")
         (not (<= 0 sec 59))                (fail! "second out of range")
         (not (<= 0 off-h 23))              (fail! "offset hour out of range")
-        (not (<= 0 off-mi 59))             (fail! "offset minute out of range"))
+        (not (<= 0 off-mi 59))             (fail! "offset minute out of range")
+        ;; Beyond nanoseconds no platform can represent the value: refuse
+        ;; rather than truncate (trailing zeros change nothing).
+        (and frac (> (count frac) 9)
+             (not (re-matches #"0*" (subs frac 9))))
+        (fail! "sub-nanosecond precision is not representable"))
       (let [off-minutes (* (if (= "-" off-sign) -1 1)
                            (+ (* 60 off-h) off-mi))]
         #?(:clj

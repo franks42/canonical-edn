@@ -2,7 +2,8 @@
   "Total ordering over canonical EDN values (Section 5).
 
   Exposed as cedn.core/rank for advanced use cases like
-  building custom sorted collections.")
+  building custom sorted collections."
+  (:require [cedn.number :as number]))
 
 (defn type-priority
   "Returns the integer priority for a value's type.
@@ -84,7 +85,7 @@
    (defn- exact-decimal
      "Exact BigDecimal value of an integer or double (no rounding)."
      [x]
-     (if (int? x)
+     (if (number/cedn-int? x)
        (java.math.BigDecimal/valueOf (long x))
        (java.math.BigDecimal. (double x)))))
 
@@ -97,8 +98,8 @@
   on the input order (§5.3.3).  On JS every number is a double, so
   plain comparison is already exact."
   [a b]
-  (let [a-int? (int? a)
-        b-int? (int? b)
+  (let [a-int? (number/cedn-int? a)
+        b-int? (number/cedn-int? b)
         cmp #?(:clj  (cond
                        (and a-int? b-int?) (compare (long a) (long b))
                        (or a-int? b-int?)  (compare (exact-decimal a) (exact-decimal b))

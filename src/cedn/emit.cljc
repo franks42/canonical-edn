@@ -67,7 +67,12 @@
      [v]
      (let [inst (cond
                   (instance? Instant v) v
-                  (instance? Date v) (.toInstant ^Date v)
+                  ;; java.sql.Date/Time are Dates whose .toInstant always
+                  ;; throws UnsupportedOperationException: refuse them
+                  ;; with a CEDN error instead.
+                  (instance? Date v) (try (.toInstant ^Date v)
+                                          (catch UnsupportedOperationException _
+                                            (err/throw-unsupported-type v)))
                   :else (err/throw-unsupported-type v))
            zdt (.atZone ^Instant inst ZoneOffset/UTC)
            nano (.getNano ^Instant inst)
@@ -75,9 +80,11 @@
        ;; RFC 3339 has exactly four year digits (§3.12)
        (when-not (<= 0 year 9999)
          (err/throw-out-of-range v))
-       (format "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
-               year (.getMonthValue zdt) (.getDayOfMonth zdt)
-               (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano))))
+       ;; Locale/ROOT: String/format localizes %d digits, so under e.g.
+       ;; ar-EG the default locale would emit Arabic-Indic digits.
+       (String/format java.util.Locale/ROOT "%04d-%02d-%02dT%02d:%02d:%02d.%09dZ"
+                      (object-array [year (.getMonthValue zdt) (.getDayOfMonth zdt)
+                                     (.getHour zdt) (.getMinute zdt) (.getSecond zdt) nano])))))
 
 #?(:cljs
    (defn- format-inst
@@ -208,17 +215,14 @@
     (boolean? value)
     (.append sb (if value "true" "false"))
 
-    (int? value)
-    (do
-      #?(:clj
-         (when-not (and (>= (long value) -9223372036854775808)
-                        (<= (long value) 9223372036854775807))
-           (err/throw-out-of-range value)))
-      (.append sb (str value)))
+    ;; int? values are always within 64 bits on the JVM (BigInts are not
+    ;; int?); on JS, cedn-int? includes the range check (§3.3).
+    (number/cedn-int? value)
+    (.append sb #?(:clj (str value) :cljs (number/format-int value)))
 
     #?(:clj  (instance? Double value)
        :cljs (and (number? value)
-                  (not (int? value))))
+                  (not (number/cedn-int? value))))
     (.append sb (number/format-double value))
 
     (string? value)

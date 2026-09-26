@@ -339,7 +339,13 @@ error (Section 7).
 On ClojureScript, where all numbers are IEEE 754 doubles, a value
 is treated as an integer if and only if it satisfies
 `(and (js/Number.isFinite x) (== x (Math/trunc x)))` and falls
-within the above range.
+within the above range.  Such an integer MUST be printed with its
+exact decimal digits.  Above 2^53 `Number.prototype.toString` does
+not do that: it prints the shortest round-trip form padded with zeros
+(2^60 becomes `"1152921504606847000"`, a different integer), so an
+exact conversion such as `BigInt(x).toString()` is required.  Whole
+numbers outside the range are doubles (Section 3.4): `1e20` is
+`"100000000000000000000.0"`.
 
 Examples:
 
