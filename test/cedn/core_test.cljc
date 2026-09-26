@@ -1,19 +1,12 @@
 (ns cedn.core-test
   (:require [clojure.test :refer [deftest is are testing]]
+            #?(:clj [cedn.test-util :as tu])
             [cedn.core :as cedn]
             [clojure.edn :as edn])
   #?(:clj (:import [java.time Instant]
                    [java.util Arrays Date UUID])))
 
 ;; --- canonical-str ---
-
-#?(:clj
-   (defn- sql-time
-     "A java.sql.Time, or nil on babashka (which lacks the class). Built
-     through eval so that bb never resolves the class name."
-     []
-     (when-not (System/getProperty "babashka.version")
-       (eval '(java.sql.Time. 0)))))
 
 (deftest canonical-str-test
   (are [input expected]
@@ -277,4 +270,4 @@
      (let [r (cedn/inspect (java.sql.Date. 0))]
        (is (= :error (:status r)))
        (is (= :cedn/unsupported-type (:cedn/error (first (:errors r))))))
-     (when-let [t (sql-time)] (is (not (cedn/valid? t))))))
+     (when-let [t (tu/sql-time)] (is (not (cedn/valid? t))))))

@@ -12,6 +12,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `release.yml` refuses to release otherwise — before tagging the next
 release.)
 
+Nits from Devin's verification of 1.6.1 (`docs/review-devin-20260926.md`).
+
+### Fixed
+
+- `valid?`, `explain` and `check` threw a raw `UnsupportedOperationException`
+  for a `java.util.Date` subclass whose `.toInstant` throws (other than
+  `java.sql.Date`/`Time`, which 1.6.1 matched by name). A `Date` is now an
+  inst only if `.toInstant` works: such values are `:cedn/unsupported-type`,
+  as in `emit`.
+- `bin/cedn`: when `--output` could not be opened, the `--input` stream was
+  left open. Streams are now opened inside the error handling.
+
 ## [1.6.1] — 2026-09-26 — Fixes from the Devin review
 
 Fixes from the Devin review (`docs/review-devin-20260926.md`). Every fix
@@ -37,6 +49,11 @@ has a test shown to fail without it.
     double for emit, ordering and the schema on every platform.
   - New compliance vectors: `int 2^60`, `int -2^63`, `double 1e20`,
     `double 2^63`, identical on all platforms.
+- **Behaviour change on ClojureScript, not noted at release:**
+  `goog.math.Long` and `goog.math.Integer` values are no longer accepted.
+  1.6.0's `int?` let them through `emit` and `valid?`, although ordering
+  already treated them as non-numbers and the spec (§3.3) covers JS numbers
+  only. They are now `:cedn/unsupported-type`.
 - **`java.sql.Date` and `java.sql.Time`** (whose `.toInstant` always
   throws) raised a raw `UnsupportedOperationException`. They are now a
   `:cedn/unsupported-type` error, and `valid?` returns false for them.

@@ -14,11 +14,12 @@
 
 (defn- inst-value?
   [x]
-  ;; java.sql.Date/Time are Dates without an instant (.toInstant throws);
-  ;; matched by name so the java.sql module is not required.
-  #?(:clj  (or (and (instance? java.util.Date x)
-                    (not (#{"java.sql.Date" "java.sql.Time"} (.getName (class x)))))
-               (instance? java.time.Instant x))
+  ;; A Date is an inst only if it has an instant: java.sql.Date/Time (and
+  ;; any other Date whose .toInstant throws) are not, which matches emit.
+  #?(:clj  (or (instance? java.time.Instant x)
+               (and (instance? java.util.Date x)
+                    (try (.toInstant ^java.util.Date x) true
+                         (catch UnsupportedOperationException _ false))))
      :cljs (instance? js/Date x)))
 
 (defn- inst-in-range?

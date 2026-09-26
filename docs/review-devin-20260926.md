@@ -283,3 +283,58 @@ test shown to fail without the fix (see CHANGELOG):
 
 Not done: property tests on bb/nbb, archiving the May-era docs, moving
 `scittle-tests.html` (housekeeping, optional).
+
+---
+
+## Verification of the 1.6.1 fixes (Devin, 2026-09-26, re-run)
+
+Each claim above was re-verified by reproduction on JVM 25 and nbb;
+JVM suite: 153 tests / 22,076 assertions, 0 failures; nbb: 110 / 692, 0.
+
+| # | Verified |
+|---|---|
+| 1 | `Locale/setDefault` to `ar-EG` now yields `#inst "2020-01-02T03:04:05.123456789Z"`. The test sweeps all compliance vectors under ar-EG, fa-IR, hi-IN (Devanagari) and th-TH — stronger than the suggested fix. |
+| 2 | nbb: `1e20` → `"100000000000000000000.0"` (matches JVM's double), `2^63` → `"9223372036854776000.0"`, `-2^63` → `"-9223372036854775808"` (in-range integer, exact), `2^60` → `"1152921504606846976"` — the exact digits, not JS's `"1152921504606847000"`. That 2^53–2^63 misprint was indeed missed here; good catch. `cedn-int?` is used consistently by emit, `compare-numbers`/`exact-decimal`, and `valid?`/`explain`; four new compliance vectors cover the boundaries. |
+| 3 | `java.sql.Date`/`Time` → `ex-info` `:cedn/unsupported-type`, `valid?` false; `Timestamp` works including `.setNanos`. |
+| 4 | `valid?`/`explain` on a year-10000 `Instant` → false / `:cedn/out-of-range`, with correct `:cedn/path` in nested structures; invalid `js/Date` rejected on CLJS. |
+| 5 | 50k-deep nesting: `canonical?` → false, `inspect` → `{:status :error}` (regression test in `core_test`). |
+| 6/7 | `rank` and `canonical?` docstrings state their domain/semantics as suggested. |
+| 8 | `fail` throws through `emit-forms!` so `finally` closes streams; main prints and exits. Parse-error exit code 1 and streaming partial output preserved (verified via CLI). |
+| 9 | `parse-inst` accepts `"…​.1230000000000Z"` (trailing zeros) and refuses `"…​.1234567895Z"` and `"…​.0000000000001Z"` with `:cedn/invalid-tag-form`. |
+
+Also correct: spec §3.3 now states the exact-digits requirement for JS
+integers; `dist/cedn.cljc` regenerated; version 1.6.1 consistent across
+`core.cljc`, `build.clj`, `bin/cedn`, README.
+
+### Residual nits (very low severity, new or remaining)
+
+- `schema/inst-in-range?` calls `.toInstant` on any `java.util.Date`
+  whose class is not literally named `java.sql.Date`/`Time`. A *subclass*
+  of those (or any exotic `Date` impl whose `.toInstant` throws) would
+  make `valid?`/`explain`/`check` throw a raw `UnsupportedOperationException`
+  rather than return false/an error map — `emit` catches it, schema does
+  not. Only reachable via custom subclasses; a `try` around the call
+  would close it.
+- `cedn-int?` on CLJS requires `number?`, so `goog.math.Long`/`Integer`
+  instances — previously emitted as integers via `int?` — now get
+  `unsupported-type`. Spec-conformant (JS numbers only), but it is a
+  behaviour change for a hypothetical caller.
+- `bin/cedn`: `die` is still used for `--input`/`--output` open failures;
+  on the output-open path the already-opened input stream is never
+  closed. The process is exiting anyway — cosmetic.
+- The `sql-time` eval-guard helper is copy-pasted into three test
+  namespaces; a shared `cedn.test-util` ns would dedupe it.
+
+### Response to the residual nits (2026-09-26, unreleased on main)
+
+- **Date subclass**: reproduced with a proxied `java.util.Date`. Fixed: a
+  `Date` is an inst only if `.toInstant` works, replacing the class-name
+  check, so `valid?`/`explain` agree with `emit` for every subclass
+  (`:cedn/unsupported-type`). Test shown to fail before the fix.
+- **`goog.math.Long`/`Integer` on CLJS**: kept rejected (spec §3.3 covers JS
+  numbers only; ordering never treated them as numbers). Recorded in the
+  1.6.1 CHANGELOG as a behaviour change not noted at release.
+- **`bin/cedn` output-open path**: fixed; both streams are opened inside
+  the error handling, so a failure opening one closes the other.
+- **`sql-time` duplication**: moved to `cedn.test-util` (with an `on-jvm`
+  helper for values bb cannot build).

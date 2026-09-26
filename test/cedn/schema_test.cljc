@@ -1,16 +1,9 @@
 (ns cedn.schema-test
   (:require [clojure.test :refer [deftest is are testing]]
+            #?(:clj [cedn.test-util :as tu])
             [cedn.schema :as schema])
   #?(:clj (:import [java.util Date]
                    [java.time Instant])))
-
-#?(:clj
-   (defn- sql-time
-     "A java.sql.Time, or nil on babashka (which lacks the class). Built
-     through eval so that bb never resolves the class name."
-     []
-     (when-not (System/getProperty "babashka.version")
-       (eval '(java.sql.Time. 0)))))
 
 (deftest valid-scalars-test
   (testing "nil, booleans, numbers, strings, keywords, symbols"
@@ -71,11 +64,17 @@
      (testing "an invalid js/Date (NaN time)"
        (is (not (schema/valid? :cedn-p (js/Date. js/NaN))))))
   #?(:clj
-     (testing "java.sql.Date/Time have no instant: not valid"
-       (is (not (schema/valid? :cedn-p (java.sql.Date. 0))))
-       (when-let [t (sql-time)] (is (not (schema/valid? :cedn-p t))))
-       (when-not (System/getProperty "babashka.version") ; bb can't build a Timestamp
-         (is (schema/valid? :cedn-p (eval '(java.sql.Timestamp. 0))))))))
+     (do
+       (testing "java.sql.Date/Time have no instant: not valid"
+         (is (not (schema/valid? :cedn-p (java.sql.Date. 0))))
+         (when-let [t (tu/sql-time)] (is (not (schema/valid? :cedn-p t))))
+         (when-let [ts (tu/on-jvm '(java.sql.Timestamp. 0))]
+           (is (schema/valid? :cedn-p ts))))
+       (testing "any Date whose .toInstant throws is not an inst (Devin verification, nit 1)"
+         (when-let [d (tu/on-jvm '(proxy [java.util.Date] []
+                                    (toInstant [] (throw (UnsupportedOperationException.)))))]
+           (is (not (schema/valid? :cedn-p d)))
+           (is (= :cedn/unsupported-type (:cedn/error (schema/explain :cedn-p d)))))))))
 
 (deftest valid-bytes-test
   (testing "byte arrays are valid"

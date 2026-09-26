@@ -1,18 +1,11 @@
 (ns cedn.emit-test
   (:require [clojure.test :refer [deftest is are testing]]
+            #?(:clj [cedn.test-util :as tu])
             [cedn.emit :as emit])
   #?(:clj (:import [java.util Date UUID]
                    [java.time Instant])))
 
 ;; --- C.1 Round-Trip Identity ---
-
-#?(:clj
-   (defn- sql-time
-     "A java.sql.Time, or nil on babashka (which lacks the class). Built
-     through eval so that bb never resolves the class name."
-     []
-     (when-not (System/getProperty "babashka.version")
-       (eval '(java.sql.Time. 0)))))
 
 (deftest emit-nil-test
   (is (= "nil" (emit/emit-str :cedn-p nil))))
@@ -57,15 +50,15 @@
    (deftest emit-sql-dates-test
      ;; java.sql.Date/Time: .toInstant throws; must be a CEDN error with
      ;; ex-data, not a raw exception (docs/review-devin-20260926.md, finding 3).
-     (doseq [v (remove nil? [(java.sql.Date. 0) (sql-time)])]
+     (doseq [v (remove nil? [(java.sql.Date. 0) (tu/sql-time)])]
        (let [e (try (emit/emit-str :cedn-p v) nil
                     (catch clojure.lang.ExceptionInfo e e))]
          (is (some? e) (str (class v) " throws ex-info"))
          (is (= :cedn/unsupported-type (:cedn/error (ex-data e))) (str (class v)))))
-     (when-not (System/getProperty "babashka.version") ; bb can't build a Timestamp
+     (when-let [ts (tu/on-jvm '(doto (java.sql.Timestamp. 0) (.setNanos 7)))]
        (testing "java.sql.Timestamp has an instant, with nanoseconds"
          (is (= "#inst \"1970-01-01T00:00:00.000000007Z\""
-                (emit/emit-str :cedn-p (eval '(doto (java.sql.Timestamp. 0) (.setNanos 7))))))))))
+                (emit/emit-str :cedn-p ts)))))))
 
 (deftest emit-double-test
   (is (= "3.14" (emit/emit-str :cedn-p 3.14)))

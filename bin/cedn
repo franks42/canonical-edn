@@ -129,14 +129,14 @@ EXAMPLES:
     edn   (java.io.ByteArrayInputStream. (.getBytes ^String edn "UTF-8"))
     input (try (java.io.FileInputStream. ^String input)
                (catch java.io.FileNotFoundException _
-                 (die 1 "input file not found:" input)))
+                 (fail 1 "input file not found:" input)))
     :else System/in))
 
 (defn make-output-stream [{:keys [output]}]
   (if output
     (try (java.io.FileOutputStream. ^String output)
          (catch java.io.IOException e
-           (die 1 "could not open output file:" (.getMessage e))))
+           (fail 1 "could not open output file:" (.getMessage e))))
     System/out))
 
 (defn make-reader [^java.io.InputStream in]
@@ -191,17 +191,20 @@ EXAMPLES:
     (:version opts) (do (println "cedn" version) (System/exit 0))
     (and (:edn opts) (:input opts))
     (die-usage "--edn and --input are mutually exclusive"))
-  (let [in     (make-input-stream opts)
-        reader (make-reader in)
-        out    (make-output-stream opts)]
+  ;; Streams are opened inside the try, so a failure opening the second
+  ;; still closes the first.
+  (let [in  (volatile! nil)
+        out (volatile! nil)]
     (when-let [[code msg]
                (try
                  (try
-                   (emit-forms! reader out (:objects opts))
+                   (vreset! in (make-input-stream opts))
+                   (vreset! out (make-output-stream opts))
+                   (emit-forms! (make-reader @in) @out (:objects opts))
                    nil
                    (finally
-                     (when (:output opts) (.close out))
-                     (when (or (:input opts) (:edn opts)) (.close in))))
+                     (when (and (:output opts) @out) (.close ^java.io.OutputStream @out))
+                     (when (and (or (:input opts) (:edn opts)) @in) (.close ^java.io.InputStream @in))))
                  (catch clojure.lang.ExceptionInfo e
                    (if-let [code (::exit (ex-data e))]
                      [code (ex-message e)]
